@@ -4,6 +4,9 @@
   "opencode_package": "opencode-ai",
   "opencode_tested": "1.18.5",
   "opencode_min": "1.1.1",
+  "opencode_command": "opencode",
+  "opencode_registry_integrity": "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw==",
+  "opencode_registry_shasum": "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6",
   "python_requires": ">=3.10",
   "runtime_baseline_ref": "references/opencode-baseline.json"
 }

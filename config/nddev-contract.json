@@ -12,6 +12,7 @@
     "catalog_root": "setups",
     "setup_ids": [
       "safe",
+      "balanced",
       "full-auto"
     ],
     "selection_option": "--setup <id>",
@@ -62,17 +63,67 @@
     ],
     "enabled_in_setups": [
       "safe",
+      "balanced",
       "full-auto"
     ]
   },
   "runtime_launch": {
     "manager_command": "python3 cli-tools/nddev_opencode.py launch --target <absolute-target> -- [args...]",
-    "direct_command": "OPENCODE_CONFIG=<absolute-target>/opencode.json OPENCODE_CONFIG_DIR=<absolute-target> opencode [args...]",
+    "direct_command": "<absolute-target>/bin/opencode [args...]",
     "requires_clean_managed_target": true,
     "forwards_arguments": true,
     "forwards_child_exit_code": true,
     "target_environment_scope": "child-process-only",
     "successful_child_output_wrapped": false
+  },
+  "software_lifecycle": {
+    "stamp_file": "NDDEV-OPENCODE-SOFTWARE.json",
+    "stamp_schema": 1,
+    "status_executes_binary": false,
+    "install_precondition": "install-cli refuses any existing target-owned software presence unless it is already current",
+    "update_precondition": "update-cli repairs existing target-owned software presence and refuses absent software state",
+    "package_manager": "bun",
+    "install_argv": [
+      "add",
+      "--global",
+      "--exact",
+      "--trust",
+      "opencode-ai@1.18.5"
+    ],
+    "trust_required": true,
+    "trust_reason": "Official opencode-ai@1.18.5 declares postinstall=node ./postinstall.mjs and platform optional packages",
+    "target_owned": true,
+    "software_root": ".nddev-opencode-software/current",
+    "entrypoint": "bin/opencode",
+    "entrypoint_kind": "bun-native-bin",
+    "persisted_stage_paths": [
+      "install/global",
+      "bin"
+    ],
+    "ephemeral_stage_paths": [
+      "home",
+      "xdg-config",
+      "cache",
+      "tmp"
+    ],
+    "stage_env": {
+      "BUN_INSTALL_GLOBAL_DIR": "<stage>/install/global",
+      "BUN_INSTALL_BIN": "<stage>/bin",
+      "BUN_INSTALL_CACHE_DIR": "<stage>/cache",
+      "HOME": "<stage>/home",
+      "XDG_CONFIG_HOME": "<stage>/xdg-config",
+      "TMPDIR": "<stage>/tmp"
+    },
+    "staged_version_probe": [
+      "bin/opencode",
+      "--version"
+    ],
+    "registry": {
+      "integrity": "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw==",
+      "shasum": "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6"
+    },
+    "credential_inheritance": false,
+    "rollback_on_swap_failure": true
   },
   "safety": {
     "absolute_target_required": true,

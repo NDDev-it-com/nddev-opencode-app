@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "balanced",
+  "description": "OpenCode setup for reviewed changes with edits, shell, external directories, web fetches, and LSP actions gated while the NDDev builder native projection stays enabled.",
+  "managed_files": [
+    "opencode.json",
+    "AGENTS.md",
+    "plugins/nddev-builder.js",
+    "skills/nddev-builder/SKILL.md",
+    "agents/nddev-builder.md"
+  ],
+  "builder_enabled": true
+}

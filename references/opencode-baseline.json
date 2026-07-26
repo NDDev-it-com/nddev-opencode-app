@@ -4,9 +4,27 @@
   "verified_version_ref": "build/version.json:opencode_tested",
   "runtime": {
     "product": "OpenCode",
+    "command": "opencode",
     "package_ref": "build/version.json:opencode_package",
     "tested_version_ref": "build/version.json:opencode_tested",
     "minimum_version_ref": "build/version.json:opencode_min"
+  },
+  "release": {
+    "npm_package": "opencode-ai",
+    "npm_version": "1.18.5",
+    "github_release": "https://github.com/anomalyco/opencode/releases/tag/v1.18.5",
+    "published_at": "2026-07-24T22:18:16Z",
+    "bin": {
+      "opencode": "bin/opencode.exe"
+    },
+    "scripts": {
+      "postinstall": "node ./postinstall.mjs"
+    },
+    "dist": {
+      "integrity": "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw==",
+      "shasum": "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6"
+    },
+    "optional_platform_packages": true
   },
   "official_sources": {
     "repository": "https://github.com/anomalyco/opencode",
@@ -22,6 +40,8 @@
     "global_config": "~/.config/opencode/opencode.json",
     "custom_config_env": "OPENCODE_CONFIG",
     "custom_config_dir_env": "OPENCODE_CONFIG_DIR",
+    "config_file": "opencode.json",
+    "global_config_dir": "~/.config/opencode",
     "native_builder_projection": [
       "plugins/nddev-builder.js",
       "skills/nddev-builder/SKILL.md",

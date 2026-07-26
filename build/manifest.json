@@ -6,6 +6,7 @@
   "source_root": "setups",
   "setup_ids": [
     "safe",
+    "balanced",
     "full-auto"
   ],
   "managed_files": [
@@ -14,7 +15,8 @@
     "plugins/nddev-builder.js",
     "skills/nddev-builder/SKILL.md",
     "agents/nddev-builder.md",
-    "NDDEV-OPENCODE-SETUP.json"
+    "NDDEV-OPENCODE-SETUP.json",
+    "NDDEV-OPENCODE-SOFTWARE.json"
   ],
   "builder": {
     "projection": "native",
@@ -39,7 +41,10 @@
       "apply",
       "switch",
       "restore",
-      "remove"
+      "remove",
+      "software-status",
+      "install-cli",
+      "update-cli"
     ],
     "target_required": [
       "status",
@@ -49,6 +54,9 @@
       "switch",
       "restore",
       "remove",
+      "software-status",
+      "install-cli",
+      "update-cli",
       "launch"
     ],
     "plan_mutates": false,
@@ -56,6 +64,7 @@
   },
   "runtime_launch": {
     "manager_command": "python3 cli-tools/nddev_opencode.py launch --target <absolute-target> -- [args...]",
+    "direct_command": "<absolute-target>/bin/opencode [args...]",
     "environment_variables": [
       "OPENCODE_CONFIG",
       "OPENCODE_CONFIG_DIR",
@@ -67,8 +76,51 @@
     ],
     "target_environment_scope": "child-process-only",
     "requires_clean_managed_target": true,
+    "requires_current_target_owned_software": true,
     "forwards_arguments": true,
     "forwards_child_exit_code": true
+  },
+  "software_lifecycle": {
+    "stamp_file": "NDDEV-OPENCODE-SOFTWARE.json",
+    "stamp_schema": 1,
+    "status_command": "python3 cli-tools/nddev_opencode.py software-status --target <absolute-target> --json",
+    "install_command": "python3 cli-tools/nddev_opencode.py install-cli --target <absolute-target> --json",
+    "update_command": "python3 cli-tools/nddev_opencode.py update-cli --target <absolute-target> --json",
+    "package_manager": "bun",
+    "install_argv": [
+      "add",
+      "--global",
+      "--exact",
+      "--trust",
+      "opencode-ai@1.18.5"
+    ],
+    "trust_required": true,
+    "trust_reason": "Official opencode-ai@1.18.5 declares postinstall=node ./postinstall.mjs and platform optional packages",
+    "target_owned": true,
+    "software_root": ".nddev-opencode-software/current",
+    "entrypoint": "bin/opencode",
+    "entrypoint_kind": "bun-native-bin",
+    "persisted_stage_paths": [
+      "install/global",
+      "bin"
+    ],
+    "ephemeral_stage_paths": [
+      "home",
+      "xdg-config",
+      "cache",
+      "tmp"
+    ],
+    "status_executes_binary": false,
+    "staged_version_probe": [
+      "bin/opencode",
+      "--version"
+    ],
+    "registry": {
+      "integrity": "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw==",
+      "shasum": "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6"
+    },
+    "credential_inheritance": false,
+    "rollback_on_swap_failure": true
   },
   "backup_policy": {
     "location": "sibling .<target-name>.nddev-opencode-backups",

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "name": "nddev-opencode-app",
+  "build_version": "0.1.0",
+  "entrypoint": "python3 cli-tools/nddev_opencode.py",
+  "source_root": "setups",
+  "setup_ids": [
+    "safe",
+    "full-auto"
+  ],
+  "managed_files": [
+    "opencode.json",
+    "AGENTS.md",
+    "plugins/nddev-builder.js",
+    "skills/nddev-builder/SKILL.md",
+    "agents/nddev-builder.md",
+    "NDDEV-OPENCODE-SETUP.json"
+  ],
+  "builder": {
+    "projection": "native",
+    "marketplace": null,
+    "native_surfaces": [
+      "plugins",
+      "skills",
+      "agents"
+    ],
+    "managed_files": [
+      "plugins/nddev-builder.js",
+      "skills/nddev-builder/SKILL.md",
+      "agents/nddev-builder.md"
+    ]
+  },
+  "command_policy": {
+    "json_supported": [
+      "list",
+      "status",
+      "plan",
+      "install",
+      "apply",
+      "switch",
+      "restore",
+      "remove"
+    ],
+    "target_required": [
+      "status",
+      "plan",
+      "install",
+      "apply",
+      "switch",
+      "restore",
+      "remove",
+      "launch"
+    ],
+    "plan_mutates": false,
+    "restore_backup_option": "--backup <0..9>"
+  },
+  "runtime_launch": {
+    "manager_command": "python3 cli-tools/nddev_opencode.py launch --target <absolute-target> -- [args...]",
+    "environment_variables": [
+      "OPENCODE_CONFIG",
+      "OPENCODE_CONFIG_DIR",
+      "HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "XDG_CACHE_HOME"
+    ],
+    "target_environment_scope": "child-process-only",
+    "requires_clean_managed_target": true,
+    "forwards_arguments": true,
+    "forwards_child_exit_code": true
+  },
+  "backup_policy": {
+    "location": "sibling .<target-name>.nddev-opencode-backups",
+    "envelope": "NDDEV-OPENCODE-BACKUP.json",
+    "slots": 10,
+    "canonical_target_bound": true
+  }
+}

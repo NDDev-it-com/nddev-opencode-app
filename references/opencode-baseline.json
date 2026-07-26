@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "verified_date": "2026-07-26",
+  "verified_version_ref": "build/version.json:opencode_tested",
+  "runtime": {
+    "product": "OpenCode",
+    "package_ref": "build/version.json:opencode_package",
+    "tested_version_ref": "build/version.json:opencode_tested",
+    "minimum_version_ref": "build/version.json:opencode_min"
+  },
+  "official_sources": {
+    "repository": "https://github.com/anomalyco/opencode",
+    "homepage": "https://opencode.ai/",
+    "config_docs": "https://opencode.ai/docs/config/",
+    "permissions_docs": "https://opencode.ai/docs/permissions/",
+    "plugins_docs": "https://opencode.ai/docs/plugins/",
+    "skills_docs": "https://opencode.ai/docs/skills/",
+    "agents_docs": "https://opencode.ai/docs/agents/",
+    "npm_package": "https://www.npmjs.com/package/opencode-ai"
+  },
+  "configuration": {
+    "global_config": "~/.config/opencode/opencode.json",
+    "custom_config_env": "OPENCODE_CONFIG",
+    "custom_config_dir_env": "OPENCODE_CONFIG_DIR",
+    "native_builder_projection": [
+      "plugins/nddev-builder.js",
+      "skills/nddev-builder/SKILL.md",
+      "agents/nddev-builder.md"
+    ],
+    "marketplace": null
+  },
+  "permissions": {
+    "current_key": "permission",
+    "legacy_tools_config_used": false,
+    "actions": [
+      "allow",
+      "ask",
+      "deny"
+    ]
+  }
+}

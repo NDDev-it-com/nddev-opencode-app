@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "full-auto",
+  "description": "OpenCode setup for fully autonomous work with all current permission surfaces allowed and the NDDev builder native projection enabled.",
+  "managed_files": [
+    "opencode.json",
+    "AGENTS.md",
+    "plugins/nddev-builder.js",
+    "skills/nddev-builder/SKILL.md",
+    "agents/nddev-builder.md"
+  ],
+  "builder_enabled": true
+}

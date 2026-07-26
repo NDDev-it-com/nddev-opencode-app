@@ -1,10 +1,107 @@
 {
   "contract_version": 1,
   "product_name": "nddev-opencode-app",
+  "display_name": "NDDev OpenCode Setup Manager",
   "github_repository": "NDDev-it-com/nddev-opencode-app",
   "license": "AGPL-3.0-or-later",
-  "skeleton": {
-    "status": "skeleton",
-    "harness_id": "opencode"
+  "description": "Dependency-free manager that installs, switches, restores, and removes selected OpenCode setup variants in an explicit isolated OpenCode config target.",
+  "manifest_ref": "build/manifest.json",
+  "version_ref": "build/version.json",
+  "source_root": "setups",
+  "setup_system": {
+    "catalog_root": "setups",
+    "setup_ids": [
+      "safe",
+      "full-auto"
+    ],
+    "selection_option": "--setup <id>",
+    "list_command": "python3 cli-tools/nddev_opencode.py list [--json]",
+    "status_command": "python3 cli-tools/nddev_opencode.py status --target <absolute-target> [--json]",
+    "plan_command": "python3 cli-tools/nddev_opencode.py plan --setup <id> --target <absolute-target> [--json]",
+    "install_command": "python3 cli-tools/nddev_opencode.py install --setup <id> --target <absolute-target> [--json]",
+    "switch_command": "python3 cli-tools/nddev_opencode.py switch --setup <id> --target <absolute-target> [--json]",
+    "restore_command": "python3 cli-tools/nddev_opencode.py restore --backup <0..9> --target <absolute-target> [--json]",
+    "remove_command": "python3 cli-tools/nddev_opencode.py remove --target <absolute-target> [--json]",
+    "plan_mutates": false
+  },
+  "managed_state": {
+    "target_env": "OPENCODE_CONFIG_DIR",
+    "config_file": "opencode.json",
+    "stamp_file": "NDDEV-OPENCODE-SETUP.json",
+    "stamp_schema": 1,
+    "backup_slots": 10,
+    "managed_file_mode": "0600",
+    "new_target_mode": "0700",
+    "managed_files": [
+      "opencode.json",
+      "AGENTS.md",
+      "plugins/nddev-builder.js",
+      "skills/nddev-builder/SKILL.md",
+      "agents/nddev-builder.md"
+    ],
+    "managed_config_keys": [
+      "autoupdate",
+      "share",
+      "permission"
+    ],
+    "preserve_other_state": true
+  },
+  "builder": {
+    "id": "nddev-builder",
+    "projection": "native",
+    "marketplace": null,
+    "native_surfaces": {
+      "plugin_directory": "plugins/",
+      "skill_directory": "skills/nddev-builder/SKILL.md",
+      "agent_directory": "agents/nddev-builder.md"
+    },
+    "managed_files": [
+      "plugins/nddev-builder.js",
+      "skills/nddev-builder/SKILL.md",
+      "agents/nddev-builder.md"
+    ],
+    "enabled_in_setups": [
+      "safe",
+      "full-auto"
+    ]
+  },
+  "runtime_launch": {
+    "manager_command": "python3 cli-tools/nddev_opencode.py launch --target <absolute-target> -- [args...]",
+    "direct_command": "OPENCODE_CONFIG=<absolute-target>/opencode.json OPENCODE_CONFIG_DIR=<absolute-target> opencode [args...]",
+    "requires_clean_managed_target": true,
+    "forwards_arguments": true,
+    "forwards_child_exit_code": true,
+    "target_environment_scope": "child-process-only",
+    "successful_child_output_wrapped": false
+  },
+  "safety": {
+    "absolute_target_required": true,
+    "default_target": null,
+    "relative_target_rejected": true,
+    "target_symlinks_rejected": true,
+    "canonical_target_binding": true,
+    "preserve_unmanaged_files": true,
+    "preserve_unmanaged_config_keys": true,
+    "reject_symlink_managed_files": true,
+    "reject_hardlinked_managed_files": true,
+    "rollback_on_failure": true,
+    "bounded_reads": true,
+    "max_backups": 10
+  },
+  "runtime_compatibility": {
+    "product": "OpenCode",
+    "version_ref": "build/version.json",
+    "baseline_ref": "references/opencode-baseline.json",
+    "official_source": {
+      "repository": "https://github.com/anomalyco/opencode",
+      "docs": "https://opencode.ai/docs/"
+    },
+    "official_docs": {
+      "config": "https://opencode.ai/docs/config/",
+      "permissions": "https://opencode.ai/docs/permissions/",
+      "plugins": "https://opencode.ai/docs/plugins/",
+      "skills": "https://opencode.ai/docs/skills/",
+      "agents": "https://opencode.ai/docs/agents/"
+    }
   }
 }

@@ -11,5 +11,5 @@ Use current OpenCode names and documented surfaces:
 - `skills/<name>/SKILL.md`
 - `agents/<name>.md`
 
-Do not introduce skeleton aliases, private harness paths, provider secrets, or
+Do not introduce legacy aliases, private harness paths, provider secrets, or
 live user state into public artifacts.

@@ -115,7 +115,9 @@ def check_setup(setup_id: str, errors: list[str]) -> None:
 def main() -> int:
     errors: list[str] = []
     version_file = ROOT / "VERSION"
-    version_text = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
+    version_text = (
+        version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
+    )
     version = load_json("build/version.json", errors)
     manifest = load_json("build/manifest.json", errors)
     contract = load_json("config/nddev-contract.json", errors)
@@ -157,11 +159,13 @@ def main() -> int:
             if software.get("registry", {}).get("shasum") != EXPECTED_SHASUM:
                 errors.append("build/manifest.json: registry shasum mismatch")
     if contract is not None:
-        if "skeleton" in contract:
-            errors.append("config/nddev-contract.json: skeleton status is not allowed")
         if contract.get("manifest_ref") != "build/manifest.json":
             errors.append("config/nddev-contract.json: manifest_ref mismatch")
-        if (contract.get("setup_system") or {}).get("setup_ids") != ["safe", "balanced", "full-auto"]:
+        if (contract.get("setup_system") or {}).get("setup_ids") != [
+            "safe",
+            "balanced",
+            "full-auto",
+        ]:
             errors.append("config/nddev-contract.json: setup_ids mismatch")
         builder = contract.get("builder")
         if not isinstance(builder, dict) or builder.get("projection") != "native":

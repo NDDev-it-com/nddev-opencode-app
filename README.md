@@ -61,6 +61,8 @@ directories for the child process so standard OpenCode global config discovery
 does not read the operator's live config. It validates setup and target-owned
 software under the target lock, releases the lock, then runs
 `/absolute/opencode-target/bin/opencode`.
+Permission-bypass flags and `opencode upgrade` are blocked; software changes go
+through the target-owned `install-cli` / `update-cli` lifecycle.
 
 ## Ownership
 

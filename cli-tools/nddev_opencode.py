@@ -89,6 +89,9 @@ LAUNCH_BLOCKED_VALUE_FLAGS = {
 LAUNCH_BLOCKED_SHORT_FLAGS = {
     "-g": "global config scope override",
 }
+LAUNCH_BLOCKED_COMMANDS = {
+    "upgrade": "target-owned software updates must go through update-cli",
+}
 OPENCODE_PACKAGE_NAME = "opencode-ai"
 OPENCODE_PACKAGE_VERSION = "1.18.5"
 OPENCODE_COMMAND = "opencode"
@@ -469,8 +472,12 @@ def validate_pre_network_software_target(target: Path) -> None:
     require_safe_partial_directory(software_entrypoint(target).parent, "bin")
     require_safe_partial_directory(software_root(target), "software root")
     require_safe_partial_directory(software_current(target), "current software tree")
-    require_safe_partial_file(software_entrypoint(target), "OpenCode entrypoint", max_bytes=SOFTWARE_MAX_BYTES)
-    require_safe_partial_file(software_stamp_path(target), SOFTWARE_STAMP_NAME, max_bytes=METADATA_MAX_BYTES)
+    require_safe_partial_file(
+        software_entrypoint(target), "OpenCode entrypoint", max_bytes=SOFTWARE_MAX_BYTES
+    )
+    require_safe_partial_file(
+        software_stamp_path(target), SOFTWARE_STAMP_NAME, max_bytes=METADATA_MAX_BYTES
+    )
 
 
 def package_manifest_path(root: Path) -> Path:
@@ -586,7 +593,9 @@ def copy_tree_sanitized(source: Path, destination: Path, allowed_roots: tuple[Pa
             source_file = materialized_source(path, allowed_roots, relative.as_posix())
             source_info = source_file.lstat()
             if not stat.S_ISREG(source_info.st_mode):
-                fail(f"staged software symlink must resolve to a regular file: {relative.as_posix()}")
+                fail(
+                    f"staged software symlink must resolve to a regular file: {relative.as_posix()}"
+                )
             total += source_info.st_size
             if total > SOFTWARE_MAX_BYTES:
                 fail("staged software tree is too large")
@@ -670,7 +679,9 @@ def run_bun_install(stage_workspace: Path) -> None:
         except subprocess.TimeoutExpired:
             fail("bun install timed out")
         if completed.returncode != 0:
-            detail = (read_process_output(stderr, "stderr") or read_process_output(stdout, "stdout")).strip()
+            detail = (
+                read_process_output(stderr, "stderr") or read_process_output(stdout, "stdout")
+            ).strip()
             fail(f"bun install failed with exit code {completed.returncode}: {detail}")
 
 
@@ -703,9 +714,13 @@ def run_stage_version_probe(stage_current: Path, stage_workspace: Path) -> str:
             fail("staged opencode executable is missing")
         except subprocess.TimeoutExpired:
             fail("staged opencode version probe timed out")
-        output = (read_process_output(stdout, "stdout") + read_process_output(stderr, "stderr")).strip()
+        output = (
+            read_process_output(stdout, "stdout") + read_process_output(stderr, "stderr")
+        ).strip()
         if completed.returncode != 0:
-            fail(f"staged opencode version probe failed with exit code {completed.returncode}: {output}")
+            fail(
+                f"staged opencode version probe failed with exit code {completed.returncode}: {output}"
+            )
         if OPENCODE_PACKAGE_VERSION not in output:
             fail("staged opencode version probe did not report the pinned release")
         return sha256_bytes(output.encode("utf-8"))
@@ -1016,7 +1031,9 @@ def snapshot_managed_files(target: Path) -> dict[str, FileSnapshot]:
 
 def assert_snapshot(target: Path, snapshot: dict[str, FileSnapshot]) -> None:
     for relative, expected in snapshot.items():
-        exists = ensure_target_directory(target, create=False) and target_file_exists(target, relative)
+        exists = ensure_target_directory(target, create=False) and target_file_exists(
+            target, relative
+        )
         if not exists:
             actual = FileSnapshot(content=None, digest=None)
         else:
@@ -1215,7 +1232,9 @@ def read_software_stamp(target: Path) -> dict[str, Any] | None:
         SOFTWARE_STAMP_SCRIPT_KEYS,
         "software stamp official_package_scripts",
     )
-    installer = exact_keys(stamp["installer"], SOFTWARE_STAMP_INSTALLER_KEYS, "software stamp installer")
+    installer = exact_keys(
+        stamp["installer"], SOFTWARE_STAMP_INSTALLER_KEYS, "software stamp installer"
+    )
     exact_keys(installer["env"], SOFTWARE_STAMP_INSTALLER_ENV_KEYS, "software stamp installer env")
     if stamp.get("product_name") != PRODUCT_NAME:
         fail("software stamp belongs to another product")
@@ -1266,13 +1285,17 @@ def software_status_payload(target: Path) -> dict[str, Any]:
             drift.append(SOFTWARE_CURRENT_NAME)
         elif stat.S_IMODE(current_info.st_mode) != OWNER_DIR_MODE:
             drift.append("software_current_mode")
-        entrypoint_info = require_regular_file(software_entrypoint(target), "OpenCode entrypoint", owner_only=False)
+        entrypoint_info = require_regular_file(
+            software_entrypoint(target), "OpenCode entrypoint", owner_only=False
+        )
         require_current_user_owner(entrypoint_info, "OpenCode entrypoint")
         if stat.S_IMODE(entrypoint_info.st_mode) != 0o700:
             drift.append("entrypoint_mode")
         load_package_manifest(software_current(target))
         entrypoint_digest = file_sha256(software_entrypoint(target), label="OpenCode entrypoint")
-        package_binary_digest = file_sha256(package_binary_path(software_current(target)), label="OpenCode package binary")
+        package_binary_digest = file_sha256(
+            package_binary_path(software_current(target)), label="OpenCode package binary"
+        )
         installed_tree_digest = tree_sha256(software_current(target))
         expected_env = {
             "BUN_INSTALL_GLOBAL_DIR": "<stage>/install/global",
@@ -1302,7 +1325,8 @@ def software_status_payload(target: Path) -> dict[str, Any]:
             "entrypoint_kind": stamp.get("entrypoint_kind") == "bun-native-bin",
             "entrypoint_main": stamp.get("entrypoint_main")
             == f"{SOFTWARE_DIR_NAME}/{SOFTWARE_CURRENT_NAME}/{OPENCODE_BINARY_RELATIVE}",
-            "installed_tree": stamp.get("installed_tree") == f"{SOFTWARE_DIR_NAME}/{SOFTWARE_CURRENT_NAME}",
+            "installed_tree": stamp.get("installed_tree")
+            == f"{SOFTWARE_DIR_NAME}/{SOFTWARE_CURRENT_NAME}",
             "manager": stamp.get("manager") == "cli-tools/nddev_opencode.py",
             "entrypoint_sha256": stamp.get("entrypoint_sha256") == entrypoint_digest,
             "package_binary_sha256": stamp.get("package_binary_sha256") == package_binary_digest,
@@ -1312,7 +1336,11 @@ def software_status_payload(target: Path) -> dict[str, Any]:
             if not ok:
                 drift.append(label)
         registry = stamp.get("registry")
-        if not isinstance(registry, dict) or registry.get("integrity") != OPENCODE_REGISTRY_INTEGRITY or registry.get("shasum") != OPENCODE_REGISTRY_SHASUM:
+        if (
+            not isinstance(registry, dict)
+            or registry.get("integrity") != OPENCODE_REGISTRY_INTEGRITY
+            or registry.get("shasum") != OPENCODE_REGISTRY_SHASUM
+        ):
             drift.append("registry")
         installer = stamp.get("installer")
         if (
@@ -1325,7 +1353,10 @@ def software_status_payload(target: Path) -> dict[str, Any]:
         ):
             drift.append("installer")
         scripts = stamp.get("official_package_scripts")
-        if not isinstance(scripts, dict) or scripts.get("postinstall") != OPENCODE_POSTINSTALL_SCRIPT:
+        if (
+            not isinstance(scripts, dict)
+            or scripts.get("postinstall") != OPENCODE_POSTINSTALL_SCRIPT
+        ):
             drift.append("official_package_scripts")
         probe = stamp.get("version_probe")
         if (
@@ -1370,7 +1401,9 @@ def software_precondition_state(target: Path) -> dict[str, Any]:
         }
 
 
-def snapshot_software_file(path: Path, label: str, max_bytes: int) -> tuple[bytes | None, int | None]:
+def snapshot_software_file(
+    path: Path, label: str, max_bytes: int
+) -> tuple[bytes | None, int | None]:
     info = stat_optional(path, label)
     if info is None:
         return None, None
@@ -1427,10 +1460,14 @@ def remove_created_target_if_empty(target: Path) -> None:
 
 
 def write_software_entrypoint_from_stage(source: Path, destination: Path, target: Path) -> str:
-    content, info = read_regular_file(source, "staged OpenCode entrypoint", max_bytes=SOFTWARE_MAX_BYTES)
+    content, info = read_regular_file(
+        source, "staged OpenCode entrypoint", max_bytes=SOFTWARE_MAX_BYTES
+    )
     ensure_software_parent(destination, target)
     require_safe_partial_file(destination, "OpenCode entrypoint", max_bytes=SOFTWARE_MAX_BYTES)
-    temporary = destination.with_name(f".{destination.name}.nddev.tmp.{os.getpid()}.{time.time_ns()}")
+    temporary = destination.with_name(
+        f".{destination.name}.nddev.tmp.{os.getpid()}.{time.time_ns()}"
+    )
     with temporary.open("xb") as handle:
         handle.write(content)
     temporary.chmod(private_mode_for_source(info))
@@ -1453,7 +1490,9 @@ def install_or_update_software(target: Path, *, update: bool) -> dict[str, Any]:
     if update and not preflight["present"]:
         fail("update-cli requires existing target-owned OpenCode software presence")
     if not update and preflight["present"]:
-        fail("install-cli found partial or non-current target-owned OpenCode software; use update-cli")
+        fail(
+            "install-cli found partial or non-current target-owned OpenCode software; use update-cli"
+        )
 
     with target_lock(target):
         created_target = stat_optional(target, "target") is None
@@ -1477,10 +1516,19 @@ def install_or_update_software(target: Path, *, update: bool) -> dict[str, Any]:
             if update and not status["present"]:
                 fail("update-cli requires existing target-owned OpenCode software presence")
             if not update and status["present"]:
-                fail("install-cli found partial or non-current target-owned OpenCode software; use update-cli")
+                fail(
+                    "install-cli found partial or non-current target-owned OpenCode software; use update-cli"
+                )
 
             parent = target.parent
-            with tempfile.TemporaryDirectory(prefix=f".{target.name}{SOFTWARE_STAGE_FRAGMENT}.", dir=str(parent)) as stage_raw, tempfile.TemporaryDirectory(prefix=f".{target.name}.nddev-opencode-software-rollback.", dir=str(parent)) as rollback_raw:
+            with (
+                tempfile.TemporaryDirectory(
+                    prefix=f".{target.name}{SOFTWARE_STAGE_FRAGMENT}.", dir=str(parent)
+                ) as stage_raw,
+                tempfile.TemporaryDirectory(
+                    prefix=f".{target.name}.nddev-opencode-software-rollback.", dir=str(parent)
+                ) as rollback_raw,
+            ):
                 stage_root = Path(stage_raw)
                 rollback_root = Path(rollback_raw)
                 stage_install = stage_root / "install-output"
@@ -1489,15 +1537,25 @@ def install_or_update_software(target: Path, *, update: bool) -> dict[str, Any]:
                 load_package_manifest(stage_install)
                 materialize_persisted_install(stage_install, stage_current)
                 staged_entrypoint = stage_current / "bin" / OPENCODE_COMMAND
-                require_regular_file(staged_entrypoint, "staged OpenCode entrypoint", owner_only=False)
+                require_regular_file(
+                    staged_entrypoint, "staged OpenCode entrypoint", owner_only=False
+                )
                 package_binary = package_binary_path(stage_current)
-                require_regular_file(package_binary, "staged OpenCode package binary", owner_only=False)
+                require_regular_file(
+                    package_binary, "staged OpenCode package binary", owner_only=False
+                )
                 version_probe_digest = run_stage_version_probe(stage_current, stage_root)
-                package_binary_digest = file_sha256(package_binary, label="staged OpenCode package binary")
+                package_binary_digest = file_sha256(
+                    package_binary, label="staged OpenCode package binary"
+                )
                 installed_tree_digest = tree_sha256(stage_current)
 
-                software_root_was_present = stat_optional(software_root(target), "software root") is not None
-                entrypoint_parent_was_present = stat_optional(software_entrypoint(target).parent, "bin") is not None
+                software_root_was_present = (
+                    stat_optional(software_root(target), "software root") is not None
+                )
+                entrypoint_parent_was_present = (
+                    stat_optional(software_entrypoint(target).parent, "bin") is not None
+                )
                 software_root(target).mkdir(mode=OWNER_DIR_MODE, exist_ok=True)
                 os.chmod(software_root(target), OWNER_DIR_MODE)
                 current = software_current(target)
@@ -1536,7 +1594,9 @@ def install_or_update_software(target: Path, *, update: bool) -> dict[str, Any]:
                     atomic_write(software_stamp_path(target), canonical_json(stamp))
                     verified = software_status_payload(target)
                     if not verified["current"]:
-                        fail(f"installed software failed status verification: {', '.join(verified['drift'])}")
+                        fail(
+                            f"installed software failed status verification: {', '.join(verified['drift'])}"
+                        )
                 except BaseException:
                     if new_current_installed:
                         shutil.rmtree(current, ignore_errors=True)
@@ -1823,15 +1883,38 @@ def remove_setup(target: Path) -> dict[str, Any]:
         }
 
 
+def ensure_private_launch_directory(target: Path, relative: str) -> Path:
+    path = target
+    for part in safe_relative_path(relative).parts:
+        path = path / part
+        label = f"launch runtime directory {path.relative_to(target)}"
+        info = stat_optional(path, label)
+        if info is None:
+            path.mkdir(mode=OWNER_DIR_MODE)
+            os.chmod(path, OWNER_DIR_MODE)
+            info = require_directory(path, label)
+        if not stat.S_ISDIR(info.st_mode):
+            fail(f"{label} must be a real directory")
+        require_current_user_owner(info, label)
+        if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
+            fail(f"{label} must be private")
+    return path
+
+
 def build_launch_env(target: Path) -> dict[str, str]:
     runtime_home = target / ".runtime-home"
     xdg_config = target / ".xdg" / "config"
     xdg_data = target / ".xdg" / "data"
     xdg_state = target / ".xdg" / "state"
     xdg_cache = target / ".xdg" / "cache"
-    for directory in (runtime_home, xdg_config, xdg_data, xdg_state, xdg_cache):
-        directory.mkdir(parents=True, exist_ok=True)
-        os.chmod(directory, OWNER_DIR_MODE)
+    for relative in (
+        ".runtime-home",
+        ".xdg/config",
+        ".xdg/data",
+        ".xdg/state",
+        ".xdg/cache",
+    ):
+        ensure_private_launch_directory(target, relative)
     return {
         "HOME": str(runtime_home),
         "OPENCODE_CONFIG": str((target / "opencode.json").resolve()),
@@ -1845,10 +1928,13 @@ def build_launch_env(target: Path) -> dict[str, str]:
 
 
 def require_safe_launch_args(child_args: list[str]) -> None:
+    first_command: str | None = None
     for token in child_args:
         if token == "--":
             return
         if not token.startswith("-"):
+            if first_command is None:
+                first_command = token
             continue
         if token in LAUNCH_BLOCKED_SHORT_FLAGS:
             fail(f"launch argument {token} is not allowed: {LAUNCH_BLOCKED_SHORT_FLAGS[token]}")
@@ -1857,9 +1943,15 @@ def require_safe_launch_args(child_args: list[str]) -> None:
             fail(f"launch argument {flag} is not allowed: {LAUNCH_BLOCKED_BOOLEAN_FLAGS[flag]}")
         if flag in LAUNCH_BLOCKED_VALUE_FLAGS:
             fail(f"launch argument {flag} is not allowed: {LAUNCH_BLOCKED_VALUE_FLAGS[flag]}")
+    if first_command in LAUNCH_BLOCKED_COMMANDS:
+        fail(
+            f"launch command {first_command} is not allowed: {LAUNCH_BLOCKED_COMMANDS[first_command]}"
+        )
 
 
-def prepare_launch_invocation(target: Path, child_args: list[str]) -> tuple[list[str], dict[str, str]]:
+def prepare_launch_invocation(
+    target: Path, child_args: list[str]
+) -> tuple[list[str], dict[str, str]]:
     with target_lock(target):
         require_clean_managed(target)
         software = software_status_payload(target)
@@ -1867,7 +1959,9 @@ def prepare_launch_invocation(target: Path, child_args: list[str]) -> tuple[list
             drift = software.get("drift") or ["target-owned OpenCode package is not installed"]
             fail(f"launch requires current target-owned OpenCode package: {', '.join(drift)}")
         executable = software_entrypoint(target)
-        executable_info = require_regular_file(executable, "target-owned OpenCode executable", owner_only=False)
+        executable_info = require_regular_file(
+            executable, "target-owned OpenCode executable", owner_only=False
+        )
         require_current_user_owner(executable_info, "target-owned OpenCode executable")
         if stat.S_IMODE(executable_info.st_mode) != 0o700:
             fail("target-owned OpenCode executable must be private executable")
@@ -1944,10 +2038,16 @@ def main(argv: list[str] | None = None) -> int:
             emit(software_status_payload(resolve_target(args.target)), as_json=args.json)
             return 0
         if args.command == "install-cli":
-            emit(install_or_update_software(resolve_target(args.target), update=False), as_json=args.json)
+            emit(
+                install_or_update_software(resolve_target(args.target), update=False),
+                as_json=args.json,
+            )
             return 0
         if args.command == "update-cli":
-            emit(install_or_update_software(resolve_target(args.target), update=True), as_json=args.json)
+            emit(
+                install_or_update_software(resolve_target(args.target), update=True),
+                as_json=args.json,
+            )
             return 0
         if args.command == "plan":
             emit(plan_setup(resolve_target(args.target), args.setup), as_json=args.json)

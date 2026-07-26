@@ -3,6 +3,8 @@
   "product_name": "nddev-opencode-app",
   "github_repository": "NDDev-it-com/nddev-opencode-app",
   "license": "AGPL-3.0-or-later",
-  "status": "skeleton",
-  "harness_id": "opencode"
+  "skeleton": {
+    "status": "skeleton",
+    "harness_id": "opencode"
+  }
 }

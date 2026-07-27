@@ -25,9 +25,9 @@ WORKFLOWS = [
     "secret-scan.yml",
     "zizmor.yml",
 ]
-EXPECTED_BUN_ARGV = ["add", "--global", "--exact", "--trust", "opencode-ai@1.18.5"]
-EXPECTED_INTEGRITY = "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw=="
-EXPECTED_SHASUM = "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6"
+EXPECTED_BUN_ARGV = ["add", "--global", "--exact", "--trust", "opencode-ai@1.18.6"]
+EXPECTED_INTEGRITY = "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w=="
+EXPECTED_SHASUM = "de8f32d2328a3f07891f263ce7f2b6f790324e13"
 
 
 def load_json(relative: str, errors: list[str]) -> dict[str, Any] | None:
@@ -128,8 +128,8 @@ def main() -> int:
             errors.append("VERSION disagrees with build/version.json:build_version")
         if version.get("opencode_package") != "opencode-ai":
             errors.append("build/version.json: opencode_package must be opencode-ai")
-        if version.get("opencode_tested") != "1.18.5":
-            errors.append("build/version.json: opencode_tested must be 1.18.5")
+        if version.get("opencode_tested") != "1.18.6":
+            errors.append("build/version.json: opencode_tested must be 1.18.6")
         if version.get("opencode_command") != "opencode":
             errors.append("build/version.json: opencode_command must be opencode")
         if version.get("opencode_registry_integrity") != EXPECTED_INTEGRITY:
@@ -197,7 +197,7 @@ def main() -> int:
         else:
             if release.get("npm_package") != "opencode-ai":
                 errors.append("references/opencode-baseline.json: package mismatch")
-            if release.get("npm_version") != "1.18.5":
+            if release.get("npm_version") != "1.18.6":
                 errors.append("references/opencode-baseline.json: version mismatch")
             if release.get("scripts", {}).get("postinstall") != "node ./postinstall.mjs":
                 errors.append("references/opencode-baseline.json: postinstall mismatch")

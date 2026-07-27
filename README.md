@@ -44,7 +44,7 @@ python3 cli-tools/nddev_opencode.py install-cli --target /absolute/opencode-targ
 python3 cli-tools/nddev_opencode.py update-cli --target /absolute/opencode-target --json
 ```
 
-The manager uses `bun add --global --exact --trust opencode-ai@1.18.5` with
+The manager uses `bun add --global --exact --trust opencode-ai@1.18.6` with
 stage-local `BUN_INSTALL_GLOBAL_DIR`, `BUN_INSTALL_BIN`,
 `BUN_INSTALL_CACHE_DIR`, `HOME`, `XDG_CONFIG_HOME`, and `TMPDIR`. Only
 `install/global` and `bin` are persisted into the target-owned software tree.

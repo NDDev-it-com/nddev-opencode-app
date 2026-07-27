@@ -93,12 +93,12 @@ LAUNCH_BLOCKED_COMMANDS = {
     "upgrade": "target-owned software updates must go through update-cli",
 }
 OPENCODE_PACKAGE_NAME = "opencode-ai"
-OPENCODE_PACKAGE_VERSION = "1.18.5"
+OPENCODE_PACKAGE_VERSION = "1.18.6"
 OPENCODE_COMMAND = "opencode"
 OPENCODE_PACKAGE_BIN = "bin/opencode.exe"
 OPENCODE_POSTINSTALL_SCRIPT = "node ./postinstall.mjs"
-OPENCODE_REGISTRY_INTEGRITY = "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw=="
-OPENCODE_REGISTRY_SHASUM = "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6"
+OPENCODE_REGISTRY_INTEGRITY = "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w=="
+OPENCODE_REGISTRY_SHASUM = "de8f32d2328a3f07891f263ce7f2b6f790324e13"
 BUN_INSTALL_ARGV = [
     "add",
     "--global",
@@ -1198,7 +1198,7 @@ def software_stamp(
         "installer": {
             "tool": "bun",
             "argv": BUN_INSTALL_ARGV,
-            "trust_reason": "official package opencode-ai@1.18.5 declares postinstall=node ./postinstall.mjs and platform optional packages",
+            "trust_reason": "official package opencode-ai@1.18.6 declares postinstall=node ./postinstall.mjs and platform optional packages",
             "env": {
                 "BUN_INSTALL_GLOBAL_DIR": "<stage>/install/global",
                 "BUN_INSTALL_BIN": "<stage>/bin",
@@ -1349,7 +1349,7 @@ def software_status_payload(target: Path) -> dict[str, Any]:
             or installer.get("argv") != BUN_INSTALL_ARGV
             or installer.get("env") != expected_env
             or installer.get("trust_reason")
-            != "official package opencode-ai@1.18.5 declares postinstall=node ./postinstall.mjs and platform optional packages"
+            != "official package opencode-ai@1.18.6 declares postinstall=node ./postinstall.mjs and platform optional packages"
         ):
             drift.append("installer")
         scripts = stamp.get("official_package_scripts")

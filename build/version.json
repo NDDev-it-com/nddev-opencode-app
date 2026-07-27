@@ -2,11 +2,11 @@
   "schema_version": 1,
   "build_version": "0.1.0",
   "opencode_package": "opencode-ai",
-  "opencode_tested": "1.18.5",
+  "opencode_tested": "1.18.6",
   "opencode_min": "1.1.1",
   "opencode_command": "opencode",
-  "opencode_registry_integrity": "sha512-Q0jlX4ihn7veMeYsLX3c4PYFAKIURU3GIpXt1FnhNxNn3v8+RpIZ8z9umG5D0r8g8Smp9fZLGjgLe/9mJ4NyYw==",
-  "opencode_registry_shasum": "91dcee1ca87ac6f445b4fbf7a3375de170acbfe6",
+  "opencode_registry_integrity": "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w==",
+  "opencode_registry_shasum": "de8f32d2328a3f07891f263ce7f2b6f790324e13",
   "python_requires": ">=3.10",
   "runtime_baseline_ref": "references/opencode-baseline.json"
 }

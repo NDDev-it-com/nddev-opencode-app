@@ -113,7 +113,8 @@ SOFTWARE_STAGE_FRAGMENT = ".nddev-opencode-software-stage"
 SOFTWARE_MAX_BYTES = 512 * 1024 * 1024
 SOFTWARE_MAX_PATHS = 20000
 PROCESS_OUTPUT_MAX_BYTES = 64 * 1024
-PROCESS_TIMEOUT_SECONDS = 120
+BUN_INSTALL_TIMEOUT_SECONDS = 900
+STAGED_VERSION_PROBE_TIMEOUT_SECONDS = 120
 OPENCODE_BINARY_RELATIVE = "install/global/node_modules/opencode-ai/bin/opencode.exe"
 SOFTWARE_STAMP_KEYS = {
     "schema_version",
@@ -672,12 +673,12 @@ def run_bun_install(stage_workspace: Path) -> None:
                 stdout=stdout,
                 stderr=stderr,
                 check=False,
-                timeout=PROCESS_TIMEOUT_SECONDS,
+                timeout=BUN_INSTALL_TIMEOUT_SECONDS,
             )
         except FileNotFoundError:
             fail("bun command was not found on PATH")
         except subprocess.TimeoutExpired:
-            fail("bun install timed out")
+            fail(f"bun install timed out after {BUN_INSTALL_TIMEOUT_SECONDS} seconds")
         if completed.returncode != 0:
             detail = (
                 read_process_output(stderr, "stderr") or read_process_output(stdout, "stdout")
@@ -708,12 +709,15 @@ def run_stage_version_probe(stage_current: Path, stage_workspace: Path) -> str:
                 stdout=stdout,
                 stderr=stderr,
                 check=False,
-                timeout=PROCESS_TIMEOUT_SECONDS,
+                timeout=STAGED_VERSION_PROBE_TIMEOUT_SECONDS,
             )
         except FileNotFoundError:
             fail("staged opencode executable is missing")
         except subprocess.TimeoutExpired:
-            fail("staged opencode version probe timed out")
+            fail(
+                "staged opencode version probe timed out after "
+                f"{STAGED_VERSION_PROBE_TIMEOUT_SECONDS} seconds"
+            )
         output = (
             read_process_output(stdout, "stdout") + read_process_output(stderr, "stderr")
         ).strip()

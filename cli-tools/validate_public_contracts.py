@@ -3051,7 +3051,6 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
 
 
 def check_cli_failure_lock_cleanup_smoke(manager: Any, errors: list[str]) -> None:
-    script = ROOT / "cli-tools" / "nddev_opencode.py"
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-cli-error-lock-") as raw:
         root = Path(raw)
         target = make_private_dir(root / "target")
@@ -3059,24 +3058,21 @@ def check_cli_failure_lock_cleanup_smoke(manager: Any, errors: list[str]) -> Non
             target / "opencode.json", manager.canonical_json({"permission": "ask"})
         )
         before = (state_bundle_signature(manager, root, target), lock_signature(manager, target))
-        completed = subprocess.run(
-            python_cli_argv(script, "install", "--target", str(target), "--json"),
-            env=subprocess_clean_env({"HOME": str(root / "home")}),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if completed.returncode == 0:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            rc = manager.main(["install", "--target", str(target), "--json"])
+        if rc == 0:
             errors.append("CLI failure lock cleanup smoke unexpectedly succeeded")
         try:
-            payload = json.loads(completed.stderr)
+            payload = json.loads(stderr.getvalue())
         except json.JSONDecodeError as exc:
             errors.append(f"CLI failure lock cleanup smoke emitted non-JSON stderr: {exc}")
         else:
             if payload.get("ok") is not False:
                 errors.append("CLI failure lock cleanup smoke JSON payload mismatch")
+        if stdout.getvalue():
+            errors.append("CLI failure lock cleanup smoke wrote stdout")
         after = (state_bundle_signature(manager, root, target), lock_signature(manager, target))
         if after != before:
             errors.append("CLI failure lock cleanup smoke left target/backup/lock residue")

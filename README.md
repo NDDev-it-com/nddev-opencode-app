@@ -1,7 +1,7 @@
 # NDDev OpenCode Setup Manager
 
-`nddev-opencode-app` installs, switches, migrates, restores, launches, and
-removes a native OpenCode `nddev-builder` setup in an explicit target
+`nddev-opencode-app` plans, installs, updates, switches, migrates, restores,
+launches, and removes a native OpenCode `nddev-builder` setup in an explicit target
 directory. It never defaults to `~/.config/opencode` and never uses the
 operator's live `HOME`.
 
@@ -30,6 +30,7 @@ is owned by `setups/nddev-builder/setup.json` and `build/manifest.json`.
 python3 cli-tools/nddev_opencode.py list --json
 python3 cli-tools/nddev_opencode.py plan --target /absolute/opencode-target --json
 python3 cli-tools/nddev_opencode.py install --target /absolute/opencode-target --json
+python3 cli-tools/nddev_opencode.py update --target /absolute/opencode-target --json
 python3 cli-tools/nddev_opencode.py switch --profile safe --target /absolute/opencode-target --json
 python3 cli-tools/nddev_opencode.py migrate --target /absolute/opencode-target --profile full-auto --json
 python3 cli-tools/nddev_opencode.py restore --backup 0 --target /absolute/opencode-target --json

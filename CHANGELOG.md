@@ -8,7 +8,8 @@
   `build/version.json`.
 - Replace Bun/npm installation with exact release asset verification and safe
   single-binary extraction.
-- Add schema-2 setup and software stamps, `migrate`, and `remove-cli`.
+- Add schema-2 setup and software stamps, canonical `update`, `migrate`, and
+  `remove-cli`.
 - Hold external and internal persistent locks through launched OpenCode child
   processes.
 - Force source-used OpenCode runtime flags for target-only config, disabled

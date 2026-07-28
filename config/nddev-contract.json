@@ -4,7 +4,7 @@
   "display_name": "NDDev OpenCode Setup Manager",
   "github_repository": "NDDev-it-com/nddev-opencode-app",
   "license": "AGPL-3.0-or-later",
-  "description": "Dependency-free manager that installs, switches, restores, migrates, launches, and removes a native OpenCode nddev-builder setup in an explicit isolated target.",
+  "description": "Dependency-free manager that plans, installs, updates, switches, restores, migrates, launches, and removes a native OpenCode nddev-builder setup in an explicit isolated target.",
   "manifest_ref": "build/manifest.json",
   "version_ref": "build/version.json",
   "source_roots": {
@@ -31,6 +31,7 @@
     "status_command": "python3 cli-tools/nddev_opencode.py status --target <absolute-target> [--json]",
     "plan_command": "python3 cli-tools/nddev_opencode.py plan --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
     "install_command": "python3 cli-tools/nddev_opencode.py install --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
+    "update_command": "python3 cli-tools/nddev_opencode.py update --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
     "switch_command": "python3 cli-tools/nddev_opencode.py switch --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
     "migrate_command": "python3 cli-tools/nddev_opencode.py migrate --target <absolute-target> [--profile <id>] [--json]",
     "restore_command": "python3 cli-tools/nddev_opencode.py restore --backup <0..9> --target <absolute-target> [--json]",
@@ -164,7 +165,8 @@
     ],
     "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
     "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
-    "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map"
+    "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
+    "host_check_before_target_inspection": true
   },
   "software_lifecycle": {
     "stamp_file": "NDDEV-OPENCODE-SOFTWARE.json",
@@ -191,6 +193,7 @@
     "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
     "host_check_before_network": true,
     "host_check_before_stage": true,
+    "host_check_before_target_inspection": true,
     "download_policy": {
       "content_length_required": true,
       "bounded_chunked_read": true,
@@ -202,7 +205,8 @@
       "remove": true,
       "restores_current_entrypoint_stamp_and_absence": true,
       "rollback_fault_retry": true,
-      "final_cleanup_non_raising": true
+      "final_cleanup_required": true,
+      "cleanup_retry": true
     },
     "credential_inheritance": false,
     "rollback_on_swap_failure": true,
@@ -242,7 +246,8 @@
     "backup_sizes_exact_present_files": true,
     "backup_digests_exact_present_files": true,
     "backup_transactional_slot_replacement": true,
-    "backup_final_cleanup_non_raising": true,
+    "backup_final_cleanup_required": true,
+    "backup_cleanup_retry": true,
     "failed_mutation_writes_backup": false,
     "noop_mutation_writes_backup": false,
     "atomic_write_order": [

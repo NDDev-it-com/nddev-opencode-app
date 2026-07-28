@@ -10,6 +10,7 @@ import sys
 sys.dont_write_bytecode = True
 
 import importlib.util
+import contextlib
 import io
 import json
 import os
@@ -44,54 +45,54 @@ SOURCE_USED_RUNTIME_FLAGS = {
     "OPENCODE_DISABLE_SHARE",
 }
 EXPECTED_RELEASE = {
-    "tag": "v1.18.7",
-    "id": 360254815,
+    "tag": "v1.18.8",
+    "id": 360858647,
     "immutable": True,
-    "tag_ref": "02981844b88aed33f06f1527da6c58d137975069",
-    "target_commitish": "35075bb46692a921ab36715e5e1f4bf7f2def494",
+    "tag_ref": "3c81a5d1ddceab377d9ad71c14899e6935333fdd",
+    "target_commitish": "484f00ebf44fbb9ec938b2155dad42c34fc5a7a7",
 }
 EXPECTED_ARTIFACTS = {
     "darwin-arm64": {
-        "id": 491142136,
+        "id": 492336314,
         "name": "opencode-darwin-arm64.zip",
-        "size": 44941305,
-        "sha256": "47efed233667713fd3e0603ddaea95d0ee2076ce00dc9faa7dbc9208aeb13505",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-darwin-arm64.zip",
+        "size": 45041487,
+        "sha256": "0fb2e11a819dd97949f0f7e0348e0e0c4fd8c42b3a5ed7aee1f0d437c94b9f0c",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-arm64.zip",
     },
     "darwin-x64": {
-        "id": 491142140,
+        "id": 492336313,
         "name": "opencode-darwin-x64.zip",
-        "size": 47179820,
-        "sha256": "feee11da7697a80e2fcf943ff9ca392d4e960c5ddabd918bdd6e4de790279b7e",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-darwin-x64.zip",
+        "size": 47279642,
+        "sha256": "0193ed3f295bb93f073ae0e8fa0737e9b31f167464761901589401fd278d4cc4",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-x64.zip",
     },
     "darwin-x64-baseline": {
-        "id": 491142139,
+        "id": 492336312,
         "name": "opencode-darwin-x64-baseline.zip",
-        "size": 47179820,
-        "sha256": "7b4d13a20d28ff6425deace63943d3e459c338cb7d26a0578bb489779b924749",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-darwin-x64-baseline.zip",
+        "size": 47279642,
+        "sha256": "16702f945bc94340c2bda3345ea936ef7927226a333f175b864ae253d9fc351e",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-x64-baseline.zip",
     },
     "linux-arm64": {
-        "id": 491142207,
+        "id": 492336388,
         "name": "opencode-linux-arm64.tar.gz",
-        "size": 59118379,
-        "sha256": "6c791e453c2ca03ee3dea09ebd16bfdfac4837e45d344a1487cd196b80090fc7",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-linux-arm64.tar.gz",
+        "size": 59208626,
+        "sha256": "3e1b4f3bd12764c911f9211910608f85429b6209900a662c7ed27196c9033b93",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64.tar.gz",
     },
     "linux-x64": {
-        "id": 491142237,
+        "id": 492336385,
         "name": "opencode-linux-x64.tar.gz",
-        "size": 59307429,
-        "sha256": "cb5d9d6d2f8fbef0a9c975ed4494f73b2a62f4e4ffd508bcc3212da4fa76c3da",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-linux-x64.tar.gz",
+        "size": 59404172,
+        "sha256": "b72014b8b53427fdb5a628d2433569ee7ccd289bd5c4490636064b24791c1305",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64.tar.gz",
     },
     "linux-x64-baseline": {
-        "id": 491142193,
+        "id": 492336397,
         "name": "opencode-linux-x64-baseline.tar.gz",
-        "size": 59307516,
-        "sha256": "96df9b0b4fcabb420c445dfdcf45d49570a57546603bbb4784593c6dfb098d7e",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-linux-x64-baseline.tar.gz",
+        "size": 59404173,
+        "sha256": "132b605fe6081e1daf1a59a43a83125db86864d59feb9c68320fafbe0cb0bdb1",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline.tar.gz",
     },
 }
 EXPECTED_SUPPORTED_PRODUCT_HOSTS = {
@@ -304,8 +305,8 @@ def check_release(
         errors.append("build/version.json: schema_version must be 2")
     if version.get("build_version") != VERSION_TEXT:
         errors.append("build/version.json: build_version mismatch")
-    if version.get("opencode_version") != "1.18.7":
-        errors.append("build/version.json: opencode_version must be 1.18.7")
+    if version.get("opencode_version") != "1.18.8":
+        errors.append("build/version.json: opencode_version must be 1.18.8")
     release = version.get("release")
     if not isinstance(release, dict):
         errors.append("build/version.json: release object required")
@@ -367,6 +368,26 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
     if manifest.get("managed_files")[: len(MANAGED_FILES)] != MANAGED_FILES:
         errors.append("build/manifest.json: managed_files mismatch")
     command_policy = manifest.get("command_policy") or {}
+    expected_json_commands = [
+        "list",
+        "status",
+        "plan",
+        "install",
+        "update",
+        "switch",
+        "migrate",
+        "restore",
+        "remove",
+        "software-status",
+        "install-cli",
+        "update-cli",
+        "remove-cli",
+    ]
+    if command_policy.get("json_supported") != expected_json_commands:
+        errors.append("build/manifest.json: canonical JSON command list mismatch")
+    expected_target_commands = expected_json_commands[1:] + ["launch"]
+    if command_policy.get("target_required") != expected_target_commands:
+        errors.append("build/manifest.json: canonical target command list mismatch")
     if command_policy.get("read_only_commands_create_locks") is not False:
         errors.append("build/manifest.json: read-only commands must not create locks")
     if command_policy.get("noop_plan_empty_changes") is not True:
@@ -409,6 +430,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
             errors.append("build/manifest.json: runtime artifact host map ref mismatch")
         if launch.get("host_check_before_runtime") is not True:
             errors.append("build/manifest.json: runtime host check before handoff required")
+        if launch.get("host_check_before_target_inspection") is not True:
+            errors.append("build/manifest.json: runtime host check before target inspection required")
         if launch.get("runtime_dirs_real_private") is not True:
             errors.append("build/manifest.json: runtime dirs must be real private dirs")
         lock_policy = launch.get("lock_file_policy") or {}
@@ -455,6 +478,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
             errors.append("build/manifest.json: host check before network required")
         if software.get("host_check_before_stage") is not True:
             errors.append("build/manifest.json: host check before stage required")
+        if software.get("host_check_before_target_inspection") is not True:
+            errors.append("build/manifest.json: host check before target inspection required")
         download = software.get("download_policy") or {}
         for key in (
             "content_length_required",
@@ -469,7 +494,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
             "update",
             "remove",
             "restores_current_entrypoint_stamp_and_absence",
-            "final_cleanup_non_raising",
+            "final_cleanup_required",
+            "cleanup_retry",
         ):
             if transaction.get(key) is not True:
                 errors.append(f"build/manifest.json: transaction_rollback.{key} required")
@@ -486,7 +512,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         "restore_transaction_rollback",
         "transactional_slot_replacement",
         "rollback_fault_retry",
-        "final_cleanup_non_raising",
+        "final_cleanup_required",
+        "cleanup_retry",
     ):
         if backup.get(key) is not True:
             errors.append(f"build/manifest.json: backup_policy.{key} required")
@@ -518,6 +545,8 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
     setup = contract.get("setup_system") or {}
     if setup.get("setup_ids") != SETUP_IDS or setup.get("profile_ids") != PROFILE_IDS:
         errors.append("config/nddev-contract.json: setup/profile ids mismatch")
+    if " update " not in f" {setup.get('update_command', '')} ":
+        errors.append("config/nddev-contract.json: setup update_command required")
     if setup.get("read_only_commands_create_locks") is not False:
         errors.append("config/nddev-contract.json: read-only commands must not create locks")
     if setup.get("noop_plan_empty_changes") is not True:
@@ -577,6 +606,8 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         != "build/version.json:artifact_product_host_map"
     ):
         errors.append("config/nddev-contract.json: runtime artifact host map ref mismatch")
+    if launch.get("host_check_before_target_inspection") is not True:
+        errors.append("config/nddev-contract.json: runtime host check before target inspection required")
     checks = launch.get("pre_handoff_checks")
     if not isinstance(checks, list) or "supported product host" not in checks:
         errors.append("config/nddev-contract.json: runtime pre-handoff host check required")
@@ -608,6 +639,8 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: host check before network required")
     if software.get("host_check_before_stage") is not True:
         errors.append("config/nddev-contract.json: host check before stage required")
+    if software.get("host_check_before_target_inspection") is not True:
+        errors.append("config/nddev-contract.json: host check before target inspection required")
     download = software.get("download_policy") or {}
     for key in ("content_length_required", "bounded_chunked_read", "fail_on_short_or_long_body"):
         if download.get(key) is not True:
@@ -618,7 +651,8 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "update",
         "remove",
         "restores_current_entrypoint_stamp_and_absence",
-        "final_cleanup_non_raising",
+        "final_cleanup_required",
+        "cleanup_retry",
     ):
         if transaction.get(key) is not True:
             errors.append(f"config/nddev-contract.json: transaction_rollback.{key} required")
@@ -645,8 +679,10 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: no-op mutation backup safety mismatch")
     if safety.get("backup_transactional_slot_replacement") is not True:
         errors.append("config/nddev-contract.json: backup transactional replacement required")
-    if safety.get("backup_final_cleanup_non_raising") is not True:
+    if safety.get("backup_final_cleanup_required") is not True:
         errors.append("config/nddev-contract.json: backup final cleanup contract required")
+    if safety.get("backup_cleanup_retry") is not True:
+        errors.append("config/nddev-contract.json: backup cleanup retry contract required")
     if safety.get("failed_mutation_writes_backup") is not False:
         errors.append("config/nddev-contract.json: failed mutation backup safety mismatch")
     if safety.get("atomic_write_order") != [
@@ -1090,7 +1126,7 @@ def fake_host() -> dict[str, Any]:
 
 
 def fake_archive(manager: Any) -> tuple[dict[str, Any], bytes, bytes]:
-    binary = b"#!/bin/sh\necho opencode 1.18.7\n"
+    binary = b"#!/bin/sh\necho opencode 1.18.8\n"
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as zf:
         info = zipfile.ZipInfo("opencode")
@@ -1122,7 +1158,7 @@ def fake_install_kwargs(manager: Any) -> dict[str, Any]:
         "release_verifier": lambda data: None,
         "artifact_resolver": lambda key: artifact,
         "artifact_downloader": artifact_downloader,
-        "version_probe": lambda binary, stage: manager.sha256_bytes(b"opencode 1.18.7"),
+        "version_probe": lambda binary, stage: manager.sha256_bytes(b"opencode 1.18.8"),
     }
 
 
@@ -1134,7 +1170,7 @@ def seed_current_software(manager: Any, target: Path, *, current: bool = True) -
         "seed software",
         create=True,
     )
-    old_binary = b"#!/bin/sh\necho old opencode 1.18.7\n"
+    old_binary = b"#!/bin/sh\necho old opencode 1.18.8\n"
     manager.atomic_write(
         target
         / manager.SOFTWARE_DIR_NAME
@@ -1688,11 +1724,10 @@ def check_restore_transaction_smokes(manager: Any, errors: list[str]) -> None:
                 errors.append(f"restore transaction {point}: state changed after rollback")
 
     for rollback_point in (
-        "atomic:managed:opencode.json:chmod",
-        "atomic:managed:opencode.json:file-fsync",
-        "atomic:managed:opencode.json:replace",
-        "atomic:managed:opencode.json:parent-fsync",
-        "atomic:managed:opencode.json:postcondition",
+        "rollback-managed:remove-new:opencode.json",
+        "rollback-managed:restore:opencode.json",
+        "rollback-managed:remove-stage",
+        "rollback-managed:postcondition",
     ):
         with tempfile.TemporaryDirectory(prefix="nddev-opencode-restore-rollback-write-") as raw:
             root = Path(raw)
@@ -1702,6 +1737,7 @@ def check_restore_transaction_smokes(manager: Any, errors: list[str]) -> None:
             )
             manager.install_or_switch(target, manager.render_profile("safe"), operation="switch")
             before = state_bundle_signature(manager, root, target)
+            before_identity = identity_mtime_signature(manager, target)
             fault, seen = one_shot_fault(manager, "write:opencode.json")
             rollback_fault, rollback_seen = one_shot_fault(manager, rollback_point)
             expect_manager_error(
@@ -1720,6 +1756,8 @@ def check_restore_transaction_smokes(manager: Any, errors: list[str]) -> None:
                 errors.append(f"restore rollback fault {rollback_point}: fault point not reached")
             if state_bundle_signature(manager, root, target) != before:
                 errors.append(f"restore rollback fault {rollback_point}: state changed after retry")
+            if identity_mtime_signature(manager, target) != before_identity:
+                errors.append(f"restore rollback fault {rollback_point}: identity changed")
 
 
 def check_managed_lifecycle_failure_smokes(manager: Any, errors: list[str]) -> None:
@@ -1755,21 +1793,18 @@ def check_managed_lifecycle_failure_smokes(manager: Any, errors: list[str]) -> N
                 errors.append(f"managed install transaction {point}: state changed after rollback")
 
     for rollback_point in (
-        "remove:opencode.json",
+        "rollback-managed:remove:opencode.json",
         "rollback-managed:remove-target",
         "rollback-managed:postcondition",
-        "atomic:managed:opencode.json:temp-write",
-        "atomic:managed:opencode.json:chmod",
-        "atomic:managed:opencode.json:file-fsync",
-        "atomic:managed:opencode.json:replace",
-        "atomic:managed:opencode.json:parent-fsync",
-        "atomic:managed:opencode.json:postcondition",
+        "rollback-managed:remove-new:opencode.json",
+        "rollback-managed:restore:opencode.json",
+        "rollback-managed:remove-stage",
     ):
         with tempfile.TemporaryDirectory(prefix="nddev-opencode-managed-rollback-fault-") as raw:
             root = Path(raw)
             target = root / "target"
             existing_target = rollback_point not in {
-                "remove:opencode.json",
+                "rollback-managed:remove:opencode.json",
                 "rollback-managed:remove-target",
             }
             if existing_target:
@@ -1777,12 +1812,14 @@ def check_managed_lifecycle_failure_smokes(manager: Any, errors: list[str]) -> N
                     target, manager.render_profile("full-auto"), operation="install"
                 )
                 before = state_bundle_signature(manager, root, target)
+                before_identity = identity_mtime_signature(manager, target)
                 original_fault, original_seen = one_shot_fault(manager, "write:opencode.json")
                 rollback_fault, rollback_seen = one_shot_fault(manager, rollback_point)
                 operation = "switch"
                 profile = manager.render_profile("safe")
             else:
                 before = state_bundle_signature(manager, root, target)
+                before_identity = identity_mtime_signature(manager, target)
                 original_fault, original_seen = one_shot_fault(manager, "write:opencode.json")
                 rollback_fault, rollback_seen = one_shot_fault(manager, rollback_point)
                 operation = "install"
@@ -1806,6 +1843,8 @@ def check_managed_lifecycle_failure_smokes(manager: Any, errors: list[str]) -> N
                 errors.append(f"managed rollback fault {rollback_point}: fault point not reached")
             if state_bundle_signature(manager, root, target) != before:
                 errors.append(f"managed rollback fault {rollback_point}: state changed after retry")
+            if identity_mtime_signature(manager, target) != before_identity:
+                errors.append(f"managed rollback fault {rollback_point}: identity changed")
 
 
 def check_backup_transaction_smokes(manager: Any, errors: list[str]) -> None:
@@ -2060,6 +2099,62 @@ def check_platform_preflight_smokes(manager: Any, errors: list[str]) -> None:
         after = (state_bundle_signature(manager, root, target), lock_signature(manager, target))
         if after != before:
             errors.append("platform launch preflight: target/lock changed")
+
+    for category in (
+        "windows",
+        "non-ubuntu-linux",
+        "linux-musl",
+        "unsupported-architecture",
+    ):
+        with tempfile.TemporaryDirectory(prefix="nddev-opencode-cli-host-gate-") as raw:
+            root = Path(raw)
+            target = root / "target"
+            called: list[str] = []
+
+            def unsupported_cli_host(category: str = category) -> dict[str, Any]:
+                raise manager.ManagerError(
+                    f"unsupported product host ({category}): validator smoke"
+                )
+
+            def forbidden_resolve(raw_target: str | None) -> Path:
+                called.append(f"resolve:{raw_target}")
+                raise manager.ManagerError("resolve_target should not run")
+
+            def forbidden_locks(target: Path, *, create_target: bool) -> Any:
+                called.append(f"locks:{target}:{create_target}")
+                raise manager.ManagerError("target_locks should not run")
+
+            commands = [
+                ["software-status", "--target", str(target), "--json"],
+                ["remove-cli", "--target", str(target), "--json"],
+                ["install-cli", "--target", str(target), "--json"],
+                ["update-cli", "--target", str(target), "--json"],
+                ["launch", "--target", str(target), "--", "--version"],
+            ]
+            original_detect = manager.detect_supported_host
+            original_resolve = manager.resolve_target
+            original_locks = manager.target_locks
+            manager.detect_supported_host = unsupported_cli_host
+            manager.resolve_target = forbidden_resolve
+            manager.target_locks = forbidden_locks
+            try:
+                for argv in commands:
+                    before = state_bundle_signature(manager, root, target)
+                    stderr = io.StringIO()
+                    with contextlib.redirect_stderr(stderr):
+                        rc = manager.main(argv)
+                    if rc != 2:
+                        errors.append(f"CLI host gate {category} returned {rc}: {argv}")
+                    if f"({category})" not in stderr.getvalue():
+                        errors.append(f"CLI host gate {category} category missing: {argv}")
+                    if called:
+                        errors.append(f"CLI host gate {category} ran target operation: {called}")
+                    if state_bundle_signature(manager, root, target) != before:
+                        errors.append(f"CLI host gate {category} changed target/root: {argv}")
+            finally:
+                manager.detect_supported_host = original_detect
+                manager.resolve_target = original_resolve
+                manager.target_locks = original_locks
 
 
 def check_lock_failure_cleanup_smokes(manager: Any, errors: list[str]) -> None:

@@ -81,13 +81,13 @@ FaultInjector = Callable[[str], None]
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 
-OPENCODE_VERSION = "1.18.7"
-OPENCODE_RELEASE_TAG = "v1.18.7"
-OPENCODE_RELEASE_ID = 360254815
+OPENCODE_VERSION = "1.18.8"
+OPENCODE_RELEASE_TAG = "v1.18.8"
+OPENCODE_RELEASE_ID = 360858647
 OPENCODE_RELEASE_IMMUTABLE = True
-OPENCODE_TAG_REF = "02981844b88aed33f06f1527da6c58d137975069"
-OPENCODE_TARGET_COMMIT = "35075bb46692a921ab36715e5e1f4bf7f2def494"
-OPENCODE_RELEASE_API = "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.7"
+OPENCODE_TAG_REF = "3c81a5d1ddceab377d9ad71c14899e6935333fdd"
+OPENCODE_TARGET_COMMIT = "484f00ebf44fbb9ec938b2155dad42c34fc5a7a7"
+OPENCODE_RELEASE_API = "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.8"
 OPENCODE_COMMAND = "opencode"
 SOFTWARE_DIR_NAME = ".nddev-opencode-software"
 SOFTWARE_CURRENT_NAME = "current"
@@ -144,51 +144,51 @@ ARTIFACT_PRODUCT_HOSTS = {
 
 ARTIFACTS: dict[str, dict[str, Any]] = {
     "darwin-arm64": {
-        "id": 491142136,
+        "id": 492336314,
         "name": "opencode-darwin-arm64.zip",
-        "size": 44941305,
-        "sha256": "47efed233667713fd3e0603ddaea95d0ee2076ce00dc9faa7dbc9208aeb13505",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-darwin-arm64.zip",
+        "size": 45041487,
+        "sha256": "0fb2e11a819dd97949f0f7e0348e0e0c4fd8c42b3a5ed7aee1f0d437c94b9f0c",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-arm64.zip",
         "format": "zip",
     },
     "darwin-x64": {
-        "id": 491142140,
+        "id": 492336313,
         "name": "opencode-darwin-x64.zip",
-        "size": 47179820,
-        "sha256": "feee11da7697a80e2fcf943ff9ca392d4e960c5ddabd918bdd6e4de790279b7e",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-darwin-x64.zip",
+        "size": 47279642,
+        "sha256": "0193ed3f295bb93f073ae0e8fa0737e9b31f167464761901589401fd278d4cc4",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-x64.zip",
         "format": "zip",
     },
     "darwin-x64-baseline": {
-        "id": 491142139,
+        "id": 492336312,
         "name": "opencode-darwin-x64-baseline.zip",
-        "size": 47179820,
-        "sha256": "7b4d13a20d28ff6425deace63943d3e459c338cb7d26a0578bb489779b924749",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-darwin-x64-baseline.zip",
+        "size": 47279642,
+        "sha256": "16702f945bc94340c2bda3345ea936ef7927226a333f175b864ae253d9fc351e",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-x64-baseline.zip",
         "format": "zip",
     },
     "linux-arm64": {
-        "id": 491142207,
+        "id": 492336388,
         "name": "opencode-linux-arm64.tar.gz",
-        "size": 59118379,
-        "sha256": "6c791e453c2ca03ee3dea09ebd16bfdfac4837e45d344a1487cd196b80090fc7",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-linux-arm64.tar.gz",
+        "size": 59208626,
+        "sha256": "3e1b4f3bd12764c911f9211910608f85429b6209900a662c7ed27196c9033b93",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64.tar.gz",
         "format": "tar.gz",
     },
     "linux-x64": {
-        "id": 491142237,
+        "id": 492336385,
         "name": "opencode-linux-x64.tar.gz",
-        "size": 59307429,
-        "sha256": "cb5d9d6d2f8fbef0a9c975ed4494f73b2a62f4e4ffd508bcc3212da4fa76c3da",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-linux-x64.tar.gz",
+        "size": 59404172,
+        "sha256": "b72014b8b53427fdb5a628d2433569ee7ccd289bd5c4490636064b24791c1305",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64.tar.gz",
         "format": "tar.gz",
     },
     "linux-x64-baseline": {
-        "id": 491142193,
+        "id": 492336397,
         "name": "opencode-linux-x64-baseline.tar.gz",
-        "size": 59307516,
-        "sha256": "96df9b0b4fcabb420c445dfdcf45d49570a57546603bbb4784593c6dfb098d7e",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.7/opencode-linux-x64-baseline.tar.gz",
+        "size": 59404173,
+        "sha256": "132b605fe6081e1daf1a59a43a83125db86864d59feb9c68320fafbe0cb0bdb1",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline.tar.gz",
         "format": "tar.gz",
     },
 }
@@ -248,6 +248,13 @@ LAUNCH_BLOCKED_COMMANDS = {
     "upgrade": "target-owned software updates must go through update-cli",
     "web": "network/browser side effect",
 }
+HOST_PRECHECK_COMMANDS = {
+    "software-status",
+    "install-cli",
+    "update-cli",
+    "remove-cli",
+    "launch",
+}
 
 
 class ManagerError(Exception):
@@ -290,12 +297,34 @@ class Profile:
 class SnapshotEntry:
     text: str | None
     digest: str | None
+    mode: int | None = None
+    identity: tuple[int, int] | None = None
+    mtime_ns: int | None = None
+    size: int | None = None
+
+
+@dataclass(frozen=True)
+class DirectorySnapshotEntry:
+    mode: int
+    identity: tuple[int, int]
+    atime_ns: int
+    mtime_ns: int
 
 
 @dataclass(frozen=True)
 class ManagedStateSnapshot:
     target_existed: bool
     files: dict[str, SnapshotEntry]
+    directories: dict[str, DirectorySnapshotEntry]
+
+
+@dataclass(frozen=True)
+class ManagedMutationTransaction:
+    target: Path
+    stage_root: Path
+    undo_root: Path
+    snapshot: ManagedStateSnapshot
+    expected: dict[str, SnapshotEntry] | None
 
 
 @dataclass(frozen=True)
@@ -887,15 +916,64 @@ def detect_drift(target: Path, stamp: dict[str, Any]) -> list[str]:
     return sorted(drift)
 
 
+def managed_parent_relatives() -> list[str]:
+    relatives = {"."}
+    for name in (*KNOWN_MANAGED_FILES, STAMP_NAME):
+        parent = safe_relative_path(name).parent
+        if str(parent) == ".":
+            continue
+        current = Path()
+        for part in parent.parts:
+            current = current / part
+            relatives.add(current.as_posix())
+    return sorted(relatives, key=lambda value: (value.count("/"), value))
+
+
 def snapshot_known_files(target: Path) -> dict[str, SnapshotEntry]:
     result: dict[str, SnapshotEntry] = {}
+    target_exists = ensure_target_directory(target, create=False)
     for relative in (*KNOWN_MANAGED_FILES, STAMP_NAME):
-        if ensure_target_directory(target, create=False) and target_file_exists(target, relative):
-            content = read_target_file(target, relative, max_bytes=MANAGED_PAYLOAD_MAX_BYTES)
+        if target_exists and target_file_exists(target, relative):
+            content, info = read_regular_file(
+                target_path(target, relative),
+                f"managed path {relative}",
+                max_bytes=MANAGED_PAYLOAD_MAX_BYTES,
+            )
             text = content.decode("utf-8")
-            result[relative] = SnapshotEntry(text=text, digest=sha256_bytes(content))
+            result[relative] = SnapshotEntry(
+                text=text,
+                digest=sha256_bytes(content),
+                mode=stat.S_IMODE(info.st_mode),
+                identity=identity_of(info),
+                mtime_ns=info.st_mtime_ns,
+                size=info.st_size,
+            )
         else:
             result[relative] = SnapshotEntry(text=None, digest=None)
+    return result
+
+
+def snapshot_managed_directories(target: Path) -> dict[str, DirectorySnapshotEntry]:
+    result: dict[str, DirectorySnapshotEntry] = {}
+    if not ensure_target_directory(target, create=False):
+        return result
+    for relative in managed_parent_relatives():
+        path = target if relative == "." else target / safe_relative_path(relative)
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            fail(f"managed parent must be a real directory: {path}")
+        require_current_user_owner(info, f"managed parent {path}")
+        if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
+            fail(f"managed parent must have mode 0700: {path}")
+        result[relative] = DirectorySnapshotEntry(
+            mode=stat.S_IMODE(info.st_mode),
+            identity=identity_of(info),
+            atime_ns=info.st_atime_ns,
+            mtime_ns=info.st_mtime_ns,
+        )
     return result
 
 
@@ -903,6 +981,7 @@ def snapshot_managed_state(target: Path) -> ManagedStateSnapshot:
     return ManagedStateSnapshot(
         target_existed=ensure_target_directory(target, create=False),
         files=snapshot_known_files(target),
+        directories=snapshot_managed_directories(target),
     )
 
 
@@ -914,13 +993,66 @@ def assert_snapshot(
         exists = ensure_target_directory(target, create=False) and target_file_exists(
             target, relative
         )
-        actual_digest: str | None
-        if exists:
-            actual_digest = sha256_bytes(read_target_file(target, relative))
-        else:
-            actual_digest = None
-        if actual_digest != expected.digest:
+        if expected.digest is None:
+            if exists:
+                raise ConcurrentTargetChange(f"managed path changed concurrently: {relative}")
+            continue
+        if not exists:
             raise ConcurrentTargetChange(f"managed path changed concurrently: {relative}")
+        content, info = read_regular_file(
+            target_path(target, relative),
+            f"managed path {relative}",
+            max_bytes=MANAGED_PAYLOAD_MAX_BYTES,
+        )
+        if (
+            sha256_bytes(content) != expected.digest
+            or stat.S_IMODE(info.st_mode) != expected.mode
+            or identity_of(info) != expected.identity
+            or info.st_mtime_ns != expected.mtime_ns
+            or info.st_size != expected.size
+        ):
+            raise ConcurrentTargetChange(f"managed path changed concurrently: {relative}")
+
+
+def assert_managed_snapshot(target: Path, snapshot: ManagedStateSnapshot) -> None:
+    if not snapshot.target_existed:
+        if target.exists() or target.is_symlink():
+            fail("managed target rollback postcondition expected absence")
+        return
+    require_real_private_directory(target, "target")
+    for relative, expected in snapshot.files.items():
+        path = target_path(target, relative)
+        if expected.digest is None:
+            if path.exists() or path.is_symlink():
+                fail(f"managed path rollback postcondition expected absence: {relative}")
+            continue
+        content, info = read_regular_file(
+            path,
+            f"managed path {relative}",
+            max_bytes=MANAGED_PAYLOAD_MAX_BYTES,
+        )
+        if sha256_bytes(content) != expected.digest:
+            fail(f"managed path rollback postcondition digest mismatch: {relative}")
+        if stat.S_IMODE(info.st_mode) != expected.mode:
+            fail(f"managed path rollback postcondition mode mismatch: {relative}")
+        if identity_of(info) != expected.identity:
+            fail(f"managed path rollback postcondition identity mismatch: {relative}")
+        if info.st_mtime_ns != expected.mtime_ns or info.st_size != expected.size:
+            fail(f"managed path rollback postcondition stat mismatch: {relative}")
+    for relative in reversed(managed_parent_relatives()):
+        path = target if relative == "." else target / safe_relative_path(relative)
+        if relative not in snapshot.directories:
+            if path.exists() or path.is_symlink():
+                fail(f"managed directory rollback postcondition expected absence: {relative}")
+            continue
+        expected_dir = snapshot.directories[relative]
+        info = require_real_private_directory(path, f"managed parent {relative}")
+        if identity_of(info) != expected_dir.identity:
+            fail(f"managed directory rollback postcondition identity mismatch: {relative}")
+        if stat.S_IMODE(info.st_mode) != expected_dir.mode:
+            fail(f"managed directory rollback postcondition mode mismatch: {relative}")
+        if info.st_mtime_ns != expected_dir.mtime_ns:
+            fail(f"managed directory rollback postcondition mtime mismatch: {relative}")
 
 
 def current_managed_digest(target: Path, relative: str) -> str | None:
@@ -1029,29 +1161,100 @@ def remove_empty_managed_parents(target: Path, relative: str) -> None:
         current = current.parent
 
 
+def ensure_private_directory_chain(root: Path, relative: Path, label: str) -> None:
+    require_real_private_directory(root, label)
+    current = root
+    for part in relative.parts:
+        current = current / part
+        ensure_real_private_directory(current, f"{label} {current.relative_to(root)}", create=True)
+
+
+def managed_stage_path(root: Path, relative: str) -> Path:
+    safe = safe_relative_path(relative)
+    if str(safe.parent) != ".":
+        ensure_private_directory_chain(root, safe.parent, "managed undo root")
+    return root / safe
+
+
+def prepare_managed_transaction(
+    target: Path,
+    expected: dict[str, SnapshotEntry] | None,
+    snapshot: ManagedStateSnapshot,
+) -> ManagedMutationTransaction:
+    stage_root = Path(
+        tempfile.mkdtemp(
+            prefix=f".{target.name}.nddev-opencode-managed-stage.",
+            dir=str(target.parent),
+        )
+    )
+    try:
+        os.chmod(stage_root, OWNER_DIR_MODE)
+        require_real_private_directory(stage_root, "managed stage root")
+        undo_root = stage_root / "undo"
+        undo_root.mkdir(mode=OWNER_DIR_MODE)
+        os.chmod(undo_root, OWNER_DIR_MODE)
+        require_real_private_directory(undo_root, "managed undo root")
+        fsync_directory(stage_root)
+        fsync_directory(stage_root.parent)
+    except BaseException:
+        cleanup_private_tree_required(stage_root, "managed stage root")
+        raise
+    return ManagedMutationTransaction(
+        target=target,
+        stage_root=stage_root,
+        undo_root=undo_root,
+        snapshot=snapshot,
+        expected=expected,
+    )
+
+
+def move_managed_original_to_undo(
+    transaction: ManagedMutationTransaction,
+    relative: str,
+    path: Path,
+    *,
+    fault_injection: FaultInjector | None,
+) -> Path:
+    undo = managed_stage_path(transaction.undo_root, relative)
+    if undo.exists() or undo.is_symlink():
+        fail(f"managed undo path already exists: {relative}")
+    require_regular_file(path, f"managed path {relative}")
+    os.replace(path, undo)
+    fsync_directory(path.parent)
+    fsync_directory(undo.parent)
+    maybe_inject_fault(fault_injection, f"managed:move-original:{relative}")
+    return undo
+
+
 def replace_managed_state(
     target: Path,
     desired: dict[str, bytes | None],
     expected: dict[str, SnapshotEntry] | None,
     *,
+    transaction: ManagedMutationTransaction,
     fault_injection: FaultInjector | None = None,
 ) -> None:
     ensure_target_directory(target, create=True)
-    if expected is not None:
-        assert_snapshot(target, expected)
+    if transaction.expected is not expected:
+        fail("managed transaction expected snapshot mismatch")
+    if transaction.expected is not None:
+        assert_snapshot(target, transaction.expected)
     for relative in KNOWN_MANAGED_FILES:
         path = target_path(target, relative)
         content = desired.get(relative)
         if content is None:
             info = stat_optional(path, f"managed path {relative}")
             if info is not None:
-                require_regular_file(path, f"managed path {relative}")
-                path.unlink()
-                fsync_directory(path.parent)
-                remove_empty_managed_parents(target, relative)
+                move_managed_original_to_undo(
+                    transaction, relative, path, fault_injection=fault_injection
+                )
                 maybe_inject_fault(fault_injection, f"remove:{relative}")
             continue
         ensure_target_private_parent(target, path, f"managed path {relative}", create=True)
+        if stat_optional(path, f"managed path {relative}") is not None:
+            move_managed_original_to_undo(
+                transaction, relative, path, fault_injection=fault_injection
+            )
         atomic_write(
             path,
             content,
@@ -1062,12 +1265,16 @@ def replace_managed_state(
     stamp_content = desired.get(STAMP_NAME)
     if stamp_content is None:
         if stat_optional(stamp_path(target), STAMP_NAME) is not None:
-            require_regular_file(stamp_path(target), STAMP_NAME)
-            stamp_path(target).unlink()
-            fsync_directory(stamp_path(target).parent)
+            move_managed_original_to_undo(
+                transaction, STAMP_NAME, stamp_path(target), fault_injection=fault_injection
+            )
             maybe_inject_fault(fault_injection, f"remove:{STAMP_NAME}")
     else:
         ensure_target_private_parent(target, stamp_path(target), STAMP_NAME, create=True)
+        if stat_optional(stamp_path(target), STAMP_NAME) is not None:
+            move_managed_original_to_undo(
+                transaction, STAMP_NAME, stamp_path(target), fault_injection=fault_injection
+            )
         atomic_write(
             stamp_path(target),
             stamp_content,
@@ -1083,36 +1290,106 @@ def assert_desired_managed_state(target: Path, desired: dict[str, bytes | None])
         fail(f"managed state postcondition mismatch: {remaining}")
 
 
-def restore_managed_snapshot(
+def restore_managed_directory_metadata(
     target: Path,
     snapshot: ManagedStateSnapshot,
     *,
     fault_injection: FaultInjector | None = None,
 ) -> None:
-    desired = {
-        name: None if entry.text is None else entry.text.encode("utf-8")
-        for name, entry in snapshot.files.items()
-    }
-    replace_managed_state(target, desired, None, fault_injection=fault_injection)
-    assert_desired_managed_state(target, desired)
-    if not snapshot.target_existed:
-        with contextlib.suppress(OSError):
-            target.rmdir()
-            fsync_directory(target.parent)
-            maybe_inject_fault(fault_injection, "rollback-managed:remove-target")
+    for relative in reversed(managed_parent_relatives()):
+        expected = snapshot.directories.get(relative)
+        if expected is None:
+            continue
+        path = target if relative == "." else target / safe_relative_path(relative)
+        require_real_private_directory(path, f"managed parent {relative}")
+        os.chmod(path, expected.mode)
+        os.utime(path, ns=(expected.atime_ns, expected.mtime_ns))
+        maybe_inject_fault(fault_injection, f"rollback-managed:restore-dir:{relative}")
+
+
+def rollback_managed_transaction_once(
+    transaction: ManagedMutationTransaction,
+    *,
+    fault_injection: FaultInjector | None = None,
+) -> None:
+    target = transaction.target
+    snapshot = transaction.snapshot
+    if target.exists() or target.is_symlink():
+        require_real_private_directory(target, "target")
+    for relative in (*KNOWN_MANAGED_FILES, STAMP_NAME):
+        path = target_path(target, relative)
+        undo = transaction.undo_root / safe_relative_path(relative)
+        expected = snapshot.files[relative]
+        if undo.exists() or undo.is_symlink():
+            require_regular_file(undo, f"managed undo path {relative}")
+            if path.exists() or path.is_symlink():
+                require_regular_file(path, f"managed path {relative}")
+                path.unlink()
+                fsync_directory(path.parent)
+                maybe_inject_fault(fault_injection, f"rollback-managed:remove-new:{relative}")
+            ensure_target_private_parent(target, path, f"managed path {relative}", create=True)
+            os.replace(undo, path)
+            fsync_directory(path.parent)
+            fsync_directory(undo.parent)
+            maybe_inject_fault(fault_injection, f"rollback-managed:restore:{relative}")
+        elif expected.digest is None and (path.exists() or path.is_symlink()):
+            require_regular_file(path, f"managed path {relative}")
+            path.unlink()
+            fsync_directory(path.parent)
+            maybe_inject_fault(fault_injection, f"rollback-managed:remove:{relative}")
+    for relative in reversed(managed_parent_relatives()):
+        if relative == ".":
+            continue
+        if relative in snapshot.directories:
+            continue
+        path = target if relative == "." else target / safe_relative_path(relative)
+        if path.exists() or path.is_symlink():
+            require_real_private_directory(path, f"managed parent {relative}")
+            try:
+                path.rmdir()
+            except OSError as exc:
+                fail(f"managed directory rollback postcondition expected empty: {relative}: {exc}")
+            fsync_directory(path.parent)
+            maybe_inject_fault(fault_injection, f"rollback-managed:remove-dir:{relative}")
+    if not snapshot.target_existed and (target.exists() or target.is_symlink()):
+        require_real_private_directory(target, "target")
+        target.rmdir()
+        fsync_directory(target.parent)
+        maybe_inject_fault(fault_injection, "rollback-managed:remove-target")
+    if snapshot.target_existed:
+        restore_managed_directory_metadata(target, snapshot, fault_injection=fault_injection)
+    cleanup_private_tree_required(
+        transaction.stage_root,
+        "managed stage root",
+        fault_injection=fault_injection,
+        fault_point="rollback-managed:remove-stage",
+    )
+    assert_managed_snapshot(target, snapshot)
     maybe_inject_fault(fault_injection, "rollback-managed:postcondition")
 
 
-def rollback_managed_snapshot(
-    target: Path,
-    snapshot: ManagedStateSnapshot,
+def rollback_managed_transaction(
+    transaction: ManagedMutationTransaction,
     *,
     fault_injection: FaultInjector | None = None,
 ) -> None:
     try:
-        restore_managed_snapshot(target, snapshot, fault_injection=fault_injection)
+        rollback_managed_transaction_once(transaction, fault_injection=fault_injection)
     except BaseException:
-        restore_managed_snapshot(target, snapshot)
+        rollback_managed_transaction_once(transaction)
+
+
+def commit_managed_transaction(
+    transaction: ManagedMutationTransaction,
+    *,
+    fault_injection: FaultInjector | None = None,
+) -> None:
+    cleanup_private_tree_required(
+        transaction.stage_root,
+        "managed stage root",
+        fault_injection=fault_injection,
+        fault_point="managed:cleanup-stage",
+    )
 
 
 def backup_root(target: Path) -> Path:
@@ -1311,8 +1588,7 @@ def prepare_backup_transaction(
         backup_pool_payloads_from_root(target, staging)
         maybe_inject_fault(fault_injection, "backup:prepare-postcondition")
     except BaseException:
-        with contextlib.suppress(ManagerError, OSError):
-            remove_private_tree(staging, "backup staging root")
+        cleanup_private_tree_required(staging, "backup staging root")
         raise
     return BackupTransaction(
         root=root,
@@ -1363,19 +1639,6 @@ def assert_backup_pool_state(target: Path, transaction: BackupTransaction) -> No
         fail("backup previous root residue remains after rollback")
     if transaction.staging_root.exists() or transaction.staging_root.is_symlink():
         fail("backup staging root residue remains after rollback")
-
-
-def best_effort_remove_private_tree(
-    path: Path,
-    label: str,
-    *,
-    fault_injection: FaultInjector | None = None,
-    fault_point: str | None = None,
-) -> None:
-    with contextlib.suppress(ManagerError, OSError):
-        remove_private_tree(path, label)
-        if fault_point is not None:
-            maybe_inject_fault(fault_injection, fault_point)
 
 
 def rollback_backup_transaction(
@@ -1453,7 +1716,7 @@ def commit_backup_transaction(
         if committed or moved_previous:
             backup_pool_payloads(target)
         raise
-    best_effort_remove_private_tree(
+    cleanup_private_tree_required(
         previous,
         "previous backup root",
         fault_injection=fault_injection,
@@ -1558,9 +1821,7 @@ def install_or_switch(
 ) -> dict[str, Any]:
     setup = render_content_setup()
     rollback_snapshot = snapshot_managed_state(target)
-    if operation == "install":
-        ensure_target_directory(target, create=True)
-    elif not ensure_target_directory(target, create=False):
+    if operation != "install" and not ensure_target_directory(target, create=False):
         fail(f"{operation} requires an existing target")
     existing = load_stamp(target)
     if operation == "install":
@@ -1569,9 +1830,9 @@ def install_or_switch(
         if existing is None or existing.get("schema_version") != 1:
             fail("migrate requires a legacy managed schema-1 target")
     elif existing is None or existing.get("schema_version") != STAMP_SCHEMA:
-        fail("switch requires a current managed schema-2 target")
+        fail(f"{operation} requires a current managed schema-2 target")
     elif detect_drift(target, existing):
-        fail("switch requires a clean managed target")
+        fail(f"{operation} requires a clean managed target")
     desired = desired_state(target, setup, profile)
     desired[STAMP_NAME] = canonical_json(stamp_payload(target, profile, desired))
     changes = state_delta(target, desired)
@@ -1588,13 +1849,21 @@ def install_or_switch(
         }
     expected = snapshot_known_files(target)
     backup_transaction: BackupTransaction | None = None
+    managed_transaction: ManagedMutationTransaction | None = None
     try:
         backup_transaction = prepare_backup_transaction(
             target,
             operation,
             fault_injection=backup_fault_injection,
         )
-        replace_managed_state(target, desired, expected, fault_injection=fault_injection)
+        managed_transaction = prepare_managed_transaction(target, expected, rollback_snapshot)
+        replace_managed_state(
+            target,
+            desired,
+            expected,
+            transaction=managed_transaction,
+            fault_injection=fault_injection,
+        )
         assert_desired_managed_state(target, desired)
         backup = commit_backup_transaction(
             target,
@@ -1602,6 +1871,7 @@ def install_or_switch(
             fault_injection=backup_fault_injection,
             rollback_fault_injection=backup_rollback_fault_injection,
         )
+        commit_managed_transaction(managed_transaction, fault_injection=fault_injection)
     except BaseException:
         if backup_transaction is not None:
             cleanup_backup_transaction(
@@ -1609,11 +1879,11 @@ def install_or_switch(
                 backup_transaction,
                 fault_injection=backup_rollback_fault_injection,
             )
-        rollback_managed_snapshot(
-            target,
-            rollback_snapshot,
-            fault_injection=rollback_fault_injection,
-        )
+        if managed_transaction is not None:
+            rollback_managed_transaction(
+                managed_transaction,
+                fault_injection=rollback_fault_injection,
+            )
         raise
     return {
         "ok": True,
@@ -1667,15 +1937,27 @@ def restore_target(
         value = files[relative]
         desired[relative] = None if value is None else str(value).encode("utf-8")
     changes = state_delta(target, desired)
+    if not changes:
+        return {
+            "ok": True,
+            "operation": "restore",
+            "target": str(target),
+            "backup": slot,
+            "changed": False,
+        }
+    transaction = prepare_managed_transaction(target, snapshot.files, snapshot)
     try:
-        replace_managed_state(target, desired, snapshot.files, fault_injection=fault_injection)
-        assert_desired_managed_state(target, desired)
-    except BaseException:
-        rollback_managed_snapshot(
+        replace_managed_state(
             target,
-            snapshot,
-            fault_injection=rollback_fault_injection,
+            desired,
+            snapshot.files,
+            transaction=transaction,
+            fault_injection=fault_injection,
         )
+        assert_desired_managed_state(target, desired)
+        commit_managed_transaction(transaction, fault_injection=fault_injection)
+    except BaseException:
+        rollback_managed_transaction(transaction, fault_injection=rollback_fault_injection)
         raise
     return {
         "ok": True,
@@ -1717,13 +1999,21 @@ def remove_target(
         }
     expected = snapshot_known_files(target)
     backup_transaction: BackupTransaction | None = None
+    managed_transaction: ManagedMutationTransaction | None = None
     try:
         backup_transaction = prepare_backup_transaction(
             target,
             "remove",
             fault_injection=backup_fault_injection,
         )
-        replace_managed_state(target, desired, expected, fault_injection=fault_injection)
+        managed_transaction = prepare_managed_transaction(target, expected, rollback_snapshot)
+        replace_managed_state(
+            target,
+            desired,
+            expected,
+            transaction=managed_transaction,
+            fault_injection=fault_injection,
+        )
         assert_desired_managed_state(target, desired)
         backup = commit_backup_transaction(
             target,
@@ -1731,6 +2021,7 @@ def remove_target(
             fault_injection=backup_fault_injection,
             rollback_fault_injection=backup_rollback_fault_injection,
         )
+        commit_managed_transaction(managed_transaction, fault_injection=fault_injection)
     except BaseException:
         if backup_transaction is not None:
             cleanup_backup_transaction(
@@ -1738,11 +2029,11 @@ def remove_target(
                 backup_transaction,
                 fault_injection=backup_rollback_fault_injection,
             )
-        rollback_managed_snapshot(
-            target,
-            rollback_snapshot,
-            fault_injection=rollback_fault_injection,
-        )
+        if managed_transaction is not None:
+            rollback_managed_transaction(
+                managed_transaction,
+                fault_injection=rollback_fault_injection,
+            )
         raise
     return {
         "ok": True,
@@ -1834,6 +2125,33 @@ def remove_private_tree(path: Path, label: str) -> None:
         require_real_private_directory(path, label)
         shutil.rmtree(path)
         fsync_directory(path.parent)
+    if path.exists() or path.is_symlink():
+        fail(f"{label} cleanup postcondition expected absence")
+
+
+def cleanup_private_tree_required(
+    path: Path,
+    label: str,
+    *,
+    fault_injection: FaultInjector | None = None,
+    fault_point: str | None = None,
+) -> None:
+    first_error: BaseException | None = None
+    for _attempt in range(2):
+        try:
+            remove_private_tree(path, label)
+            if fault_point is not None:
+                maybe_inject_fault(fault_injection, fault_point)
+            if path.exists() or path.is_symlink():
+                fail(f"{label} cleanup postcondition expected absence")
+            return
+        except BaseException as exc:
+            if first_error is None:
+                first_error = exc
+                continue
+            raise
+    if first_error is not None:
+        raise first_error
 
 
 def restore_binary_file(
@@ -1906,17 +2224,20 @@ def restore_software_state(
         fault_injection=fault_injection,
     )
     if not snapshot.bin_dir_existed:
-        with contextlib.suppress(OSError):
+        if (target / "bin").exists() or (target / "bin").is_symlink():
+            require_real_private_directory(target / "bin", "software entrypoint parent")
             (target / "bin").rmdir()
             fsync_directory(target)
             maybe_inject_fault(fault_injection, "rollback-software:remove-bin-dir")
     if not snapshot.software_root_existed:
-        with contextlib.suppress(OSError):
+        if software_root(target).exists() or software_root(target).is_symlink():
+            require_real_private_directory(software_root(target), SOFTWARE_DIR_NAME)
             software_root(target).rmdir()
             fsync_directory(target)
             maybe_inject_fault(fault_injection, "rollback-software:remove-software-root")
     if not snapshot.target_existed:
-        with contextlib.suppress(OSError):
+        if target.exists() or target.is_symlink():
+            require_real_private_directory(target, "target")
             target.rmdir()
             fsync_directory(target.parent)
             maybe_inject_fault(fault_injection, "rollback-software:remove-target")
@@ -2771,8 +3092,7 @@ def install_cli(
         if not status["current"]:
             fail(f"installed OpenCode software is not current: {status['drift']}")
     except BaseException:
-        with contextlib.suppress(ManagerError, OSError):
-            remove_private_tree(stage_parent, "OpenCode stage")
+        cleanup_private_tree_required(stage_parent, "OpenCode stage")
         rollback_software_state(
             target,
             snapshot,
@@ -2780,15 +3100,27 @@ def install_cli(
             fault_injection=rollback_fault_injection,
         )
         raise
-    finally:
-        with contextlib.suppress(ManagerError, OSError):
-            remove_private_tree(stage_parent, "OpenCode stage")
-    best_effort_remove_private_tree(
-        previous_current,
-        "previous OpenCode software tree",
-        fault_injection=fault_injection,
-        fault_point="software:cleanup-previous-current",
-    )
+    try:
+        cleanup_private_tree_required(
+            stage_parent,
+            "OpenCode stage",
+            fault_injection=fault_injection,
+            fault_point="software:cleanup-stage",
+        )
+        cleanup_private_tree_required(
+            previous_current,
+            "previous OpenCode software tree",
+            fault_injection=fault_injection,
+            fault_point="software:cleanup-previous-current",
+        )
+    except BaseException:
+        rollback_software_state(
+            target,
+            snapshot,
+            previous_current=previous_current if previous_current_moved else None,
+            fault_injection=rollback_fault_injection,
+        )
+        raise
     return {
         "ok": True,
         "operation": "update-cli" if update else "install-cli",
@@ -2864,15 +3196,12 @@ def remove_cli(
             fault_injection=rollback_fault_injection,
         )
         raise
-    best_effort_remove_private_tree(
+    cleanup_private_tree_required(
         stage_root,
         "remove-cli stage",
         fault_injection=fault_injection,
         fault_point="remove-cli:cleanup-stage",
     )
-    with contextlib.suppress(ManagerError, OSError):
-        (target / "bin").rmdir()
-        fsync_directory(target)
     return {
         "ok": True,
         "operation": "remove-cli",
@@ -3066,8 +3395,8 @@ def validate_executable_for_launch(target: Path, stamp: dict[str, Any]) -> dict[
     return {"device": before.st_dev, "inode": before.st_ino, "sha256": digest}
 
 
-def launch(target: Path, child_args: list[str]) -> int:
-    detect_supported_host()
+def launch(target: Path, child_args: list[str], *, host: dict[str, Any] | None = None) -> int:
+    _ = host if host is not None else detect_supported_host()
     with target_locks(target, create_target=False):
         status = current_status(target)
         if not status.get("managed") or status.get("legacy") or status.get("drift"):
@@ -3121,7 +3450,7 @@ def build_parser() -> argparse.ArgumentParser:
         add_target(p)
         add_json(p)
 
-    for name in ("plan", "install", "apply", "switch"):
+    for name in ("plan", "install", "update", "switch"):
         p = sub.add_parser(name, help=f"{name} managed setup/profile")
         add_target(p)
         p.add_argument("--setup", default=CONTENT_SETUP_ID, choices=[CONTENT_SETUP_ID])
@@ -3170,6 +3499,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         command = args.command
+        prechecked_host = detect_supported_host() if command in HOST_PRECHECK_COMMANDS else None
         if command == "list":
             payload = {
                 "setup_ids": [CONTENT_SETUP_ID],
@@ -3196,7 +3526,7 @@ def main(argv: list[str] | None = None) -> int:
             child_args = list(args.args)
             if child_args and child_args[0] == "--":
                 child_args = child_args[1:]
-            return launch(target, child_args)
+            return launch(target, child_args, host=prechecked_host)
 
         target = resolve_target(args.target) if hasattr(args, "target") else None
         assert target is not None
@@ -3209,11 +3539,15 @@ def main(argv: list[str] | None = None) -> int:
         elif command == "plan":
             payload = plan_payload(target, render_profile(args.profile))
         else:
-            create_for_command = command in {"install", "apply", "install-cli"}
+            create_for_command = command in {"install", "install-cli"}
             with target_locks(target, create_target=create_for_command):
-                if command in {"install", "apply"}:
+                if command == "install":
                     payload = install_or_switch(
                         target, render_profile(args.profile), operation="install"
+                    )
+                elif command == "update":
+                    payload = install_or_switch(
+                        target, render_profile(args.profile), operation="update"
                     )
                 elif command == "switch":
                     payload = install_or_switch(
@@ -3226,9 +3560,13 @@ def main(argv: list[str] | None = None) -> int:
                 elif command == "remove":
                     payload = remove_target(target)
                 elif command == "install-cli":
-                    payload = install_cli(target, update=False)
+                    payload = install_cli(
+                        target, update=False, host_detector=lambda: prechecked_host
+                    )
                 elif command == "update-cli":
-                    payload = install_cli(target, update=True)
+                    payload = install_cli(
+                        target, update=True, host_detector=lambda: prechecked_host
+                    )
                 elif command == "remove-cli":
                     payload = remove_cli(target)
                 else:

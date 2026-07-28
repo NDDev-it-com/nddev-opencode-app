@@ -54,7 +54,7 @@
       "status",
       "plan",
       "install",
-      "apply",
+      "update",
       "switch",
       "migrate",
       "restore",
@@ -68,7 +68,7 @@
       "status",
       "plan",
       "install",
-      "apply",
+      "update",
       "switch",
       "migrate",
       "restore",
@@ -115,6 +115,7 @@
     "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
     "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
     "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
+    "host_check_before_target_inspection": true,
     "host_check_before_runtime": true
   },
   "software_lifecycle": {
@@ -141,7 +142,8 @@
       "remove": true,
       "restores_current_entrypoint_stamp_and_absence": true,
       "rollback_fault_retry": true,
-      "final_cleanup_non_raising": true
+      "final_cleanup_required": true,
+      "cleanup_retry": true
     },
     "staged_version_probe": [
       "bin/opencode",
@@ -155,7 +157,8 @@
     "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
     "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
     "host_check_before_network": true,
-    "host_check_before_stage": true
+    "host_check_before_stage": true,
+    "host_check_before_target_inspection": true
   },
   "backup_policy": {
     "location": "sibling .<target-name>.nddev-opencode-backups",
@@ -172,7 +175,8 @@
     "transactional_slot_replacement": true,
     "failed_mutation_writes_backup": false,
     "rollback_fault_retry": true,
-    "final_cleanup_non_raising": true
+    "final_cleanup_required": true,
+    "cleanup_retry": true
   },
   "atomic_write_policy": {
     "order": [

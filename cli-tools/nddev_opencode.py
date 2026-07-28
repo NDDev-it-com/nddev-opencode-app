@@ -43,10 +43,12 @@ BACKUP_NAME = "NDDEV-OPENCODE-BACKUP.json"
 SOFTWARE_STAMP_NAME = "NDDEV-OPENCODE-SOFTWARE.json"
 CLEANUP_PARENT_NAME = ".nddev-opencode-cleanup-pending"
 CLEANUP_JOURNAL_NAME = "NDDEV-OPENCODE-CLEANUP.json"
+CLEANUP_PREPARE_NAME = "NDDEV-OPENCODE-CLEANUP.prepare.json"
 STAMP_SCHEMA = 2
 BACKUP_SCHEMA = 3
 SOFTWARE_STAMP_SCHEMA = 2
 CLEANUP_JOURNAL_SCHEMA = 1
+CLEANUP_PREPARE_SCHEMA = 1
 MAX_BACKUPS = 10
 MAX_CLEANUP_PATHS = 8
 MAX_CLEANUP_OBJECTS = 512
@@ -55,6 +57,7 @@ OWNER_EXEC_MODE = 0o700
 OWNER_DIR_MODE = 0o700
 METADATA_MAX_BYTES = 256 * 1024
 CLEANUP_JOURNAL_MAX_BYTES = 1024 * 1024
+CLEANUP_PREPARE_MAX_BYTES = 2 * 1024 * 1024
 MANAGED_PAYLOAD_MAX_BYTES = 1024 * 1024
 SOFTWARE_MAX_BYTES = 512 * 1024 * 1024
 PROCESS_OUTPUT_MAX_BYTES = 64 * 1024
@@ -348,6 +351,14 @@ class ConcurrentTargetChange(ManagerError):
 
 class CleanupJournalPublishedPending(ManagerError):
     """Cleanup journal final path is visible; later cleanup must drain it."""
+
+
+class CleanupJournalPublishedInvalid(ManagerError):
+    """Cleanup journal final path is visible but cannot prove valid pending state."""
+
+
+class CleanupPreparePublishedPending(ManagerError):
+    """Cleanup prepare intent final path is visible; later recovery must complete it."""
 
 
 class ManagerCliParseError(Exception):
@@ -682,6 +693,7 @@ def require_regular_file(
     *,
     private: bool = False,
     executable: bool = False,
+    allow_hardlink_aliases: bool = False,
 ) -> os.stat_result:
     try:
         info = path.lstat()
@@ -689,7 +701,7 @@ def require_regular_file(
         fail(f"{label} is missing")
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
         fail(f"{label} must be a regular non-symlink file")
-    if info.st_nlink != 1:
+    if info.st_nlink != 1 and not allow_hardlink_aliases:
         fail(f"{label} must not have hard-link aliases")
     require_current_user_owner(info, label)
     mode = stat.S_IMODE(info.st_mode)
@@ -707,8 +719,15 @@ def read_regular_file(
     private: bool = False,
     executable: bool = False,
     max_bytes: int = MANAGED_PAYLOAD_MAX_BYTES,
+    allow_hardlink_aliases: bool = False,
 ) -> tuple[bytes, os.stat_result]:
-    before = require_regular_file(path, label, private=private, executable=executable)
+    before = require_regular_file(
+        path,
+        label,
+        private=private,
+        executable=executable,
+        allow_hardlink_aliases=allow_hardlink_aliases,
+    )
     if before.st_size > max_bytes:
         fail(f"{label} exceeds the {max_bytes}-byte size limit")
     flags = os.O_RDONLY
@@ -735,7 +754,13 @@ def read_regular_file(
         after = os.fstat(descriptor)
     finally:
         os.close(descriptor)
-    final = require_regular_file(path, label, private=private, executable=executable)
+    final = require_regular_file(
+        path,
+        label,
+        private=private,
+        executable=executable,
+        allow_hardlink_aliases=allow_hardlink_aliases,
+    )
     if identity_of(after) != identity_of(before) or identity_of(final) != identity_of(before):
         raise ConcurrentTargetChange(f"{label} changed while it was read")
     return b"".join(chunks), final
@@ -1069,7 +1094,7 @@ def detect_drift(target: Path, stamp: dict[str, Any]) -> list[str]:
         content = read_target_file(target, relative, private=True)
         if managed_digest(relative, content) != expected[relative]:
             drift.append(relative)
-    for relative in set(LEGACY_MANAGED_FILES) - set(MANAGED_FILES):
+    for relative in set[str](LEGACY_MANAGED_FILES) - set[str](MANAGED_FILES):
         if target_file_exists(target, relative):
             drift.append(f"stale:{relative}")
     return sorted(drift)
@@ -2225,11 +2250,21 @@ def install_or_switch(
 
 
 def migrate_target(target: Path, profile_id: str | None) -> dict[str, Any]:
+    cleanup_drained = load_cleanup_journal(target, recover_aliases=True) is not None
+    drain_cleanup_pending(target, allow_pending=False)
     stamp = load_stamp_any(target)
     if stamp is None:
         fail("migrate requires a legacy managed target")
     if stamp.get("schema_version") == STAMP_SCHEMA:
-        return {"ok": True, "operation": "migrate", "already_current": True, "target": str(target)}
+        return {
+            "ok": True,
+            "operation": "migrate",
+            "already_current": True,
+            "target": str(target),
+            "changed": cleanup_drained,
+            "changes": ["cleanup-pending"] if cleanup_drained else [],
+            "cleanup_pending": False,
+        }
     if stamp.get("schema_version") != 1 or stamp.get("product_name") != PRODUCT_NAME:
         fail("migrate requires a legacy nddev-opencode schema-1 stamp")
     legacy_setup = stamp.get("setup_id")
@@ -2244,7 +2279,13 @@ def migrate_target(target: Path, profile_id: str | None) -> dict[str, Any]:
     else:
         fail(f"unsupported legacy setup id: {legacy_setup!r}")
     profile = render_profile(selected_profile)
-    return install_or_switch(target, profile, operation="migrate")
+    result = install_or_switch(target, profile, operation="migrate")
+    if cleanup_drained:
+        result["changed"] = True
+        changes = list(result.get("changes", []))
+        if "cleanup-pending" not in changes:
+            result["changes"] = ["cleanup-pending", *changes]
+    return result
 
 
 def restore_target(
@@ -2597,6 +2638,10 @@ def cleanup_journal_path(target: Path) -> Path:
     return cleanup_parent(target) / CLEANUP_JOURNAL_NAME
 
 
+def cleanup_prepare_path(target: Path) -> Path:
+    return cleanup_parent(target) / CLEANUP_PREPARE_NAME
+
+
 def cleanup_machine_source_category(target: Path, path: Path) -> str | None:
     parent_prefixes = {
         f".{target.name}.nddev-opencode-managed-stage.": "managed-stage",
@@ -2795,6 +2840,71 @@ def cleanup_entry_for_path(
         "tree_sha256": tree_sha256(source),
         "objects": objects,
     }
+
+
+def cleanup_source_relative_path(target: Path, source: Path) -> tuple[str, str]:
+    roots = (
+        ("software-root", software_root(target)),
+        ("target", target),
+        ("target-parent", target.parent),
+    )
+    for scope, root in roots:
+        try:
+            relative = source.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        validate_cleanup_object_relative(relative)
+        if relative == "." or "/" in relative:
+            fail("cleanup source relative path must be a bounded direct child")
+        return scope, relative
+    fail(f"cleanup source is outside declared source roots: {source}")
+
+
+def cleanup_prepare_source_record(
+    target: Path,
+    source: Path,
+    entry: dict[str, Any],
+) -> dict[str, Any]:
+    anchor, relative = cleanup_source_relative_path(target, source)
+    return {
+        "relative_name": entry["relative_name"],
+        "source_kind": entry["category"],
+        "anchor": anchor,
+        "relative_path": relative,
+    }
+
+
+def cleanup_prepare_source_path(
+    target: Path,
+    record: dict[str, Any],
+    entry: dict[str, Any],
+) -> Path:
+    keys = {"relative_name", "source_kind", "anchor", "relative_path"}
+    if not isinstance(record, dict) or set(record) != keys:
+        fail("cleanup prepare source record has invalid keys")
+    if (
+        record["relative_name"] != entry["relative_name"]
+        or record["source_kind"] != entry["category"]
+    ):
+        fail("cleanup prepare source record does not match journal entry")
+    anchor = record["anchor"]
+    relative = record["relative_path"]
+    if anchor not in {"target-parent", "target", "software-root"}:
+        fail("cleanup prepare source anchor is invalid")
+    if not isinstance(relative, str):
+        fail("cleanup prepare source relative path must be a string")
+    validate_cleanup_object_relative(relative)
+    if relative == "." or "/" in relative:
+        fail("cleanup prepare source relative path must be a bounded direct child")
+    root = {
+        "target-parent": target.parent,
+        "target": target,
+        "software-root": software_root(target),
+    }[str(anchor)]
+    path = root / relative
+    if cleanup_machine_source_category(target, path) != entry["category"]:
+        fail("cleanup prepare source category binding is invalid")
+    return path
 
 
 def validate_cleanup_entry_shape(entry: Any) -> dict[str, Any]:
@@ -3005,6 +3115,35 @@ def validate_cleanup_tombstone_complete(target: Path, entry: dict[str, Any]) -> 
     return path
 
 
+def validate_cleanup_directory_matches_entry(
+    path: Path,
+    entry: dict[str, Any],
+    label: str,
+) -> None:
+    info = require_real_private_directory(path, label)
+    objects = cleanup_entry_objects(entry)
+    actual = {"."}
+    for item in path.rglob("*"):
+        actual.add(cleanup_object_relative(path, item))
+    if actual != set(objects):
+        fail(f"{label} object graph does not match cleanup entry")
+    root_object = objects["."]
+    if (
+        info.st_uid != root_object["uid"]
+        or stat.S_IMODE(info.st_mode) != root_object["mode"]
+        or info.st_nlink != root_object["nlink"]
+        or info.st_dev != root_object["device"]
+        or info.st_ino != root_object["inode"]
+        or info.st_size != root_object["size"]
+        or info.st_mtime_ns != root_object["mtime_ns"]
+    ):
+        fail(f"{label} identity does not match cleanup entry")
+    if tree_total_size(path) != entry["tree_size"] or tree_sha256(path) != entry["tree_sha256"]:
+        fail(f"{label} content does not match cleanup entry")
+    for obj in objects.values():
+        validate_cleanup_object_present(path, obj, exact=True)
+
+
 def cleanup_journal_payload(target: Path, entries: list[dict[str, Any]]) -> dict[str, Any]:
     if not entries or len(entries) > MAX_CLEANUP_PATHS:
         fail("cleanup journal entry count is invalid")
@@ -3030,7 +3169,355 @@ def cleanup_journal_bytes(payload: dict[str, Any]) -> bytes:
     return content
 
 
-def publish_cleanup_journal(target: Path, payload: dict[str, Any]) -> None:
+def cleanup_prepare_payload(
+    target: Path,
+    journal_payload: dict[str, Any],
+    sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    payload = {
+        "schema_version": CLEANUP_PREPARE_SCHEMA,
+        "product_name": PRODUCT_NAME,
+        "build_version": VERSION,
+        "canonical_target": str(target),
+        "cleanup_parent": CLEANUP_PARENT_NAME,
+        "prepare_file": CLEANUP_PREPARE_NAME,
+        "journal_file": CLEANUP_JOURNAL_NAME,
+        "journal_schema": CLEANUP_JOURNAL_SCHEMA,
+        "journal_serialized_max_bytes": CLEANUP_JOURNAL_MAX_BYTES,
+        "serialized_max_bytes": CLEANUP_PREPARE_MAX_BYTES,
+        "phase": "preparing",
+        "journal_payload": journal_payload,
+        "sources": sources,
+    }
+    cleanup_prepare_bytes(payload)
+    return payload
+
+
+def cleanup_prepare_bytes(payload: dict[str, Any]) -> bytes:
+    content = canonical_json(payload)
+    if len(content) > CLEANUP_PREPARE_MAX_BYTES:
+        fail("cleanup prepare intent exceeds serialized size limit")
+    return content
+
+
+def validate_cleanup_journal_payload_shape(
+    target: Path,
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    keys = {
+        "schema_version",
+        "product_name",
+        "build_version",
+        "canonical_target",
+        "cleanup_parent",
+        "max_entries",
+        "serialized_max_bytes",
+        "phase",
+        "entries",
+    }
+    if set(payload) != keys:
+        fail("cleanup journal has invalid keys")
+    if (
+        payload["schema_version"] != CLEANUP_JOURNAL_SCHEMA
+        or payload["product_name"] != PRODUCT_NAME
+        or payload["canonical_target"] != str(target)
+        or payload["cleanup_parent"] != CLEANUP_PARENT_NAME
+        or payload["max_entries"] != MAX_CLEANUP_PATHS
+        or payload["serialized_max_bytes"] != CLEANUP_JOURNAL_MAX_BYTES
+        or payload["phase"] != "ready"
+    ):
+        fail("cleanup journal identity or binding is invalid")
+    entries = payload["entries"]
+    if not isinstance(entries, list) or not entries or len(entries) > MAX_CLEANUP_PATHS:
+        fail("cleanup journal entry count is invalid")
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for index, raw_entry in enumerate(entries):
+        entry = validate_cleanup_entry_shape(raw_entry)
+        if entry["relative_name"] != cleanup_relative_name(index, str(entry["category"])):
+            fail("cleanup journal tombstone order mismatch")
+        if entry["relative_name"] in seen:
+            fail("cleanup journal has duplicate tombstone names")
+        seen.add(entry["relative_name"])
+        result.append(entry)
+    return result
+
+
+def validate_cleanup_prepare_payload(
+    target: Path,
+    payload: dict[str, Any],
+    *,
+    expected_journal: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[Path]]:
+    keys = {
+        "schema_version",
+        "product_name",
+        "build_version",
+        "canonical_target",
+        "cleanup_parent",
+        "prepare_file",
+        "journal_file",
+        "journal_schema",
+        "journal_serialized_max_bytes",
+        "serialized_max_bytes",
+        "phase",
+        "journal_payload",
+        "sources",
+    }
+    if set(payload) != keys:
+        fail("cleanup prepare intent has invalid keys")
+    if (
+        payload["schema_version"] != CLEANUP_PREPARE_SCHEMA
+        or payload["product_name"] != PRODUCT_NAME
+        or payload["canonical_target"] != str(target)
+        or payload["cleanup_parent"] != CLEANUP_PARENT_NAME
+        or payload["prepare_file"] != CLEANUP_PREPARE_NAME
+        or payload["journal_file"] != CLEANUP_JOURNAL_NAME
+        or payload["journal_schema"] != CLEANUP_JOURNAL_SCHEMA
+        or payload["journal_serialized_max_bytes"] != CLEANUP_JOURNAL_MAX_BYTES
+        or payload["serialized_max_bytes"] != CLEANUP_PREPARE_MAX_BYTES
+        or payload["phase"] != "preparing"
+    ):
+        fail("cleanup prepare intent identity or binding is invalid")
+    journal_payload = payload["journal_payload"]
+    if not isinstance(journal_payload, dict):
+        fail("cleanup prepare intent journal payload must be an object")
+    cleanup_journal_bytes(journal_payload)
+    if expected_journal is not None and cleanup_journal_bytes(
+        journal_payload
+    ) != cleanup_journal_bytes(expected_journal):
+        fail("cleanup prepare intent does not match cleanup journal")
+    entries = validate_cleanup_journal_payload_shape(target, journal_payload)
+    sources = payload["sources"]
+    if not isinstance(sources, list) or len(sources) != len(entries):
+        fail("cleanup prepare intent source count is invalid")
+    source_paths: list[Path] = []
+    for raw_source, entry in zip(sources, entries):
+        source_paths.append(cleanup_prepare_source_path(target, raw_source, entry))
+    return journal_payload, source_paths
+
+
+def read_cleanup_prepare_payload(
+    target: Path,
+    prepare: Path,
+    *,
+    expected_journal: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[Path]]:
+    content, _after = read_cleanup_prepare_payload_bytes(prepare)
+    payload = parse_json_object(content, CLEANUP_PREPARE_NAME)
+    cleanup_prepare_bytes(payload)
+    return validate_cleanup_prepare_payload(
+        target,
+        payload,
+        expected_journal=expected_journal,
+    )
+
+
+def require_cleanup_prepare_file(final: Path) -> os.stat_result:
+    try:
+        info = final.lstat()
+    except FileNotFoundError:
+        fail("cleanup prepare intent is missing")
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        fail("cleanup prepare intent must be a regular non-symlink file")
+    require_current_user_owner(info, CLEANUP_PREPARE_NAME)
+    if stat.S_IMODE(info.st_mode) != OWNER_FILE_MODE:
+        fail("cleanup prepare intent must have mode 0600")
+    if info.st_nlink not in {1, 2}:
+        fail("cleanup prepare intent must not have unexpected hard-link aliases")
+    if info.st_size > CLEANUP_PREPARE_MAX_BYTES:
+        fail("cleanup prepare intent exceeds serialized size limit")
+    return info
+
+
+def read_cleanup_prepare_payload_bytes(
+    prepare: Path,
+    *,
+    allow_hardlink_aliases: bool = False,
+) -> tuple[bytes, os.stat_result]:
+    return read_regular_file(
+        prepare,
+        CLEANUP_PREPARE_NAME,
+        private=True,
+        max_bytes=CLEANUP_PREPARE_MAX_BYTES,
+        allow_hardlink_aliases=allow_hardlink_aliases,
+    )
+
+
+def require_cleanup_prepare_publication_alias(
+    final: Path,
+    temporary: Path,
+    identity: tuple[int, int],
+) -> None:
+    if temporary.parent != final.parent or not temporary.name.startswith(
+        f".{CLEANUP_PREPARE_NAME}."
+    ):
+        fail("cleanup prepare temporary alias is outside bounded publication namespace")
+    suffix = temporary.name[len(f".{CLEANUP_PREPARE_NAME}.") :]
+    if not ANCHOR_TEMP_RANDOM_PATTERN.fullmatch(suffix):
+        fail("cleanup prepare temporary alias name is not machine-owned")
+    try:
+        info = temporary.lstat()
+    except FileNotFoundError:
+        fail("cleanup prepare temporary alias is missing before validation")
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        fail("cleanup prepare temporary alias is not a regular file")
+    require_current_user_owner(info, "cleanup prepare temporary alias")
+    if stat.S_IMODE(info.st_mode) != OWNER_FILE_MODE or identity_of(info) != identity:
+        fail("cleanup prepare temporary alias identity mismatch")
+
+
+def validate_cleanup_prepare_publication(
+    target: Path,
+    final: Path,
+    temporary: Path | None = None,
+) -> None:
+    before = require_cleanup_prepare_file(final)
+    if temporary is not None:
+        if before.st_nlink != 2:
+            fail("cleanup prepare publication alias expected a two-link final")
+        require_cleanup_prepare_publication_alias(final, temporary, identity_of(before))
+    elif before.st_nlink != 1:
+        fail("cleanup prepare recovery requires exclusive target coordination")
+    content, _after = read_cleanup_prepare_payload_bytes(
+        final,
+        allow_hardlink_aliases=temporary is not None,
+    )
+    payload = parse_json_object(content, CLEANUP_PREPARE_NAME)
+    cleanup_prepare_bytes(payload)
+    validate_cleanup_prepare_payload(target, payload)
+
+
+def recover_cleanup_prepare_temp_alias(final: Path, identity: tuple[int, int]) -> None:
+    parent = final.parent
+    prefix = f".{CLEANUP_PREPARE_NAME}."
+    try:
+        children = list(parent.iterdir())
+    except OSError as exc:
+        fail(f"cleanup prepare alias scan failed: {exc}")
+    if len(children) > ANCHOR_PARENT_SCAN_LIMIT:
+        fail("cleanup prepare parent scan exceeded bounded limit")
+    matches: list[Path] = []
+    for child in children:
+        if child == final or not child.name.startswith(prefix):
+            continue
+        suffix = child.name[len(prefix) :]
+        if not ANCHOR_TEMP_RANDOM_PATTERN.fullmatch(suffix):
+            fail(f"cleanup prepare temporary alias name is not machine-owned: {child.name}")
+        info = child.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            fail("cleanup prepare temporary alias is not a regular file")
+        require_current_user_owner(info, "cleanup prepare temporary alias")
+        if stat.S_IMODE(info.st_mode) != OWNER_FILE_MODE or identity_of(info) != identity:
+            fail("cleanup prepare temporary alias identity mismatch")
+        matches.append(child)
+    if len(matches) != 1:
+        fail("cleanup prepare intent has unexpected hard-link aliases")
+    matches[0].unlink()
+    fsync_directory(parent)
+
+
+def cleanup_unpublished_prepare_or_journal_temps(parent: Path) -> bool:
+    removed = False
+    prefixes = (
+        f".{CLEANUP_PREPARE_NAME}.",
+        f".{CLEANUP_JOURNAL_NAME}.",
+    )
+    for child in list(parent.iterdir()):
+        prefix = next((value for value in prefixes if child.name.startswith(value)), None)
+        if prefix is None:
+            continue
+        suffix = child.name[len(prefix) :]
+        if not ANCHOR_TEMP_RANDOM_PATTERN.fullmatch(suffix):
+            fail(f"cleanup temporary state is not machine-owned: {child.name}")
+        info = child.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            fail("cleanup temporary state must be a regular file")
+        require_current_user_owner(info, "cleanup temporary state")
+        if stat.S_IMODE(info.st_mode) != OWNER_FILE_MODE or info.st_nlink != 1:
+            fail("cleanup temporary state identity is invalid")
+        child.unlink()
+        removed = True
+        fsync_directory(parent)
+    return removed
+
+
+def publish_cleanup_prepare(target: Path, payload: dict[str, Any]) -> None:
+    parent = cleanup_parent(target)
+    final = cleanup_prepare_path(target)
+    if final.exists() or final.is_symlink():
+        fail("cleanup prepare intent already exists")
+    content = cleanup_prepare_bytes(payload)
+    fd = -1
+    temporary: Path | None = None
+    final_visible = False
+    try:
+        fd, temporary_name = tempfile.mkstemp(prefix=f".{CLEANUP_PREPARE_NAME}.", dir=str(parent))
+        temporary = Path(temporary_name)
+        os.set_inheritable(fd, False)
+        os.fchmod(fd, OWNER_FILE_MODE)
+        written = 0
+        while written < len(content):
+            count = os.write(fd, content[written:])
+            if count <= 0:
+                fail("cleanup prepare write made no progress")
+            written += count
+        fsync_file_descriptor(fd)
+        try:
+            os.close(fd)
+        except OSError as exc:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            fd = -1
+            fail(f"cleanup prepare close failed before publication: {exc}")
+        fd = -1
+        os.link(temporary, final)
+        final_visible = True
+        validate_cleanup_prepare_publication(target, final, temporary)
+        try:
+            temporary.unlink()
+            fsync_directory(parent)
+            validate_cleanup_prepare_publication(target, final)
+        except BaseException as exc:
+            try:
+                final_info = require_cleanup_prepare_file(final)
+                validate_cleanup_prepare_publication(
+                    target,
+                    final,
+                    temporary if temporary.exists() or temporary.is_symlink() else None,
+                )
+                if final_info.st_nlink == 2 and not (temporary.exists() or temporary.is_symlink()):
+                    fail("cleanup prepare intent has an unknown hard-link alias")
+            except BaseException as validation_exc:
+                fail(
+                    "cleanup prepare final validation failed after publication cleanup fault: "
+                    f"{validation_exc}"
+                )
+            raise CleanupPreparePublishedPending(
+                f"cleanup prepare intent is pending after final-path publication: {exc}"
+            ) from exc
+    except BaseException:
+        if (
+            not final_visible
+            and temporary is not None
+            and (temporary.exists() or temporary.is_symlink())
+        ):
+            temporary.unlink()
+            fsync_directory(parent)
+        raise
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def publish_cleanup_journal(
+    target: Path,
+    payload: dict[str, Any],
+    *,
+    prepare_intent: Path | None = None,
+) -> None:
     parent = cleanup_parent(target)
     ensure_target_private_directory(
         target,
@@ -3052,17 +3539,73 @@ def publish_cleanup_journal(target: Path, payload: dict[str, Any]) -> None:
         os.fchmod(fd, OWNER_FILE_MODE)
         written = 0
         while written < len(content):
-            written += os.write(fd, content[written:])
+            count = os.write(fd, content[written:])
+            if count <= 0:
+                fail("cleanup journal write made no progress")
+            written += count
         fsync_file_descriptor(fd)
-        os.close(fd)
+        try:
+            os.close(fd)
+        except OSError as exc:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            fd = -1
+            fail(f"cleanup journal close failed before publication: {exc}")
         fd = -1
         os.link(temporary, final)
         final_visible = True
         try:
-            temporary.unlink()
-            fsync_directory(parent)
-            read_cleanup_journal_payload(target, final)
+            final_payload = read_cleanup_journal_payload_bytes(
+                final,
+                allow_hardlink_aliases=True,
+            )
+            validate_cleanup_journal_payload(
+                target,
+                final_payload,
+                publication_alias=temporary,
+                prepare_intent=prepare_intent,
+            )
         except BaseException as exc:
+            raise CleanupJournalPublishedInvalid(
+                f"cleanup journal final validation failed after final-path publication: {exc}"
+            ) from exc
+        try:
+            temporary.unlink()
+            if prepare_intent is not None and (
+                prepare_intent.exists() or prepare_intent.is_symlink()
+            ):
+                require_regular_file(prepare_intent, CLEANUP_PREPARE_NAME, private=True)
+                prepare_intent.unlink()
+            fsync_directory(parent)
+            final_payload = read_cleanup_journal_payload(target, final)
+            validate_cleanup_journal_payload(target, final_payload)
+        except BaseException as exc:
+            try:
+                final_info = require_cleanup_journal_file(final)
+                final_payload = read_cleanup_journal_payload_bytes(
+                    final,
+                    allow_hardlink_aliases=True,
+                )
+                validate_cleanup_journal_payload(
+                    target,
+                    final_payload,
+                    publication_alias=temporary
+                    if temporary.exists() or temporary.is_symlink()
+                    else None,
+                    prepare_intent=prepare_intent
+                    if prepare_intent is not None
+                    and (prepare_intent.exists() or prepare_intent.is_symlink())
+                    else None,
+                )
+                if final_info.st_nlink == 2 and not (temporary.exists() or temporary.is_symlink()):
+                    fail("cleanup journal has an unknown hard-link alias after publication")
+            except BaseException as validation_exc:
+                raise CleanupJournalPublishedInvalid(
+                    "cleanup journal final validation failed after publication cleanup fault: "
+                    f"{validation_exc}"
+                ) from validation_exc
             raise CleanupJournalPublishedPending(
                 f"cleanup journal is pending after final-path publication: {exc}"
             ) from exc
@@ -3131,15 +3674,136 @@ def read_cleanup_journal_payload(target: Path, final: Path) -> dict[str, Any]:
     before = require_cleanup_journal_file(final)
     if before.st_nlink != 1:
         fail("cleanup journal recovery requires exclusive target coordination")
+    return read_cleanup_journal_payload_bytes(final)
+
+
+def read_cleanup_journal_payload_bytes(
+    final: Path,
+    *,
+    allow_hardlink_aliases: bool = False,
+) -> dict[str, Any]:
     content, _after = read_regular_file(
         final,
         CLEANUP_JOURNAL_NAME,
         private=True,
         max_bytes=CLEANUP_JOURNAL_MAX_BYTES,
+        allow_hardlink_aliases=allow_hardlink_aliases,
     )
     payload = parse_json_object(content, CLEANUP_JOURNAL_NAME)
     cleanup_journal_bytes(payload)
     return payload
+
+
+def require_cleanup_journal_publication_alias(
+    final: Path,
+    temporary: Path,
+    identity: tuple[int, int],
+) -> None:
+    if temporary.parent != final.parent or not temporary.name.startswith(
+        f".{CLEANUP_JOURNAL_NAME}."
+    ):
+        fail("cleanup journal temporary alias is outside bounded publication namespace")
+    suffix = temporary.name[len(f".{CLEANUP_JOURNAL_NAME}.") :]
+    if not ANCHOR_TEMP_RANDOM_PATTERN.fullmatch(suffix):
+        fail("cleanup journal temporary alias name is not machine-owned")
+    try:
+        info = temporary.lstat()
+    except FileNotFoundError:
+        fail("cleanup journal temporary alias is missing before validation")
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        fail("cleanup journal temporary alias is not a regular file")
+    require_current_user_owner(info, "cleanup journal temporary alias")
+    if stat.S_IMODE(info.st_mode) != OWNER_FILE_MODE or identity_of(info) != identity:
+        fail("cleanup journal temporary alias identity mismatch")
+
+
+def validate_cleanup_journal_payload(
+    target: Path,
+    payload: dict[str, Any],
+    *,
+    publication_alias: Path | None = None,
+    prepare_intent: Path | None = None,
+) -> dict[str, Any]:
+    parent = cleanup_parent(target)
+    if publication_alias is not None:
+        before = require_cleanup_journal_file(cleanup_journal_path(target))
+        if before.st_nlink != 2:
+            fail("cleanup journal publication alias expected a two-link final")
+        require_cleanup_journal_publication_alias(
+            cleanup_journal_path(target),
+            publication_alias,
+            identity_of(before),
+        )
+    entries = validate_cleanup_journal_payload_shape(target, payload)
+    if prepare_intent is not None:
+        read_cleanup_prepare_payload(target, prepare_intent, expected_journal=payload)
+    seen: set[str] = set()
+    for entry in entries:
+        seen.add(entry["relative_name"])
+        validate_cleanup_tombstone_identity(target, entry)
+    allowed = {CLEANUP_JOURNAL_NAME, *seen}
+    if publication_alias is not None:
+        allowed.add(publication_alias.name)
+    if prepare_intent is not None:
+        allowed.add(CLEANUP_PREPARE_NAME)
+    for child in parent.iterdir():
+        if publication_alias is not None and child == publication_alias:
+            continue
+        if child.name.startswith(f".{CLEANUP_JOURNAL_NAME}."):
+            fail("cleanup pending parent contains unpublished journal state")
+        if child.name not in allowed:
+            fail(f"cleanup pending parent contains unknown state: {child.name}")
+    return payload
+
+
+def recover_cleanup_preparation(target: Path) -> None:
+    parent = cleanup_parent(target)
+    require_real_private_directory(parent, "cleanup pending parent")
+    final = cleanup_journal_path(target)
+    if final.exists() or final.is_symlink():
+        fail("cleanup preparation recovery requires absent final journal")
+    prepare = cleanup_prepare_path(target)
+    before = require_cleanup_prepare_file(prepare)
+    if before.st_nlink == 2:
+        recover_cleanup_prepare_temp_alias(prepare, identity_of(before))
+    elif before.st_nlink != 1:
+        fail("cleanup prepare intent must not have unexpected hard-link aliases")
+    journal_payload, sources = read_cleanup_prepare_payload(target, prepare)
+    entries = validate_cleanup_journal_payload_shape(target, journal_payload)
+    allowed = {CLEANUP_PREPARE_NAME, *(entry["relative_name"] for entry in entries)}
+    cleanup_unpublished_prepare_or_journal_temps(parent)
+    for child in parent.iterdir():
+        if child.name.startswith(f".{CLEANUP_JOURNAL_NAME}."):
+            fail("cleanup pending parent contains unpublished journal state")
+        if child.name not in allowed:
+            fail(f"cleanup pending parent contains unknown state: {child.name}")
+    for entry, source in zip(entries, sources):
+        tombstone = cleanup_tombstone_path(target, entry["relative_name"])
+        source_present = source.exists() or source.is_symlink()
+        tombstone_present = tombstone.exists() or tombstone.is_symlink()
+        if source_present and tombstone_present:
+            fail("cleanup preparation recovery found both source and tombstone")
+        if not source_present and not tombstone_present:
+            fail("cleanup preparation recovery found neither source nor tombstone")
+        if source_present:
+            validate_cleanup_directory_matches_entry(
+                source,
+                entry,
+                f"cleanup prepared source {source}",
+            )
+            os.replace(source, tombstone)
+            fsync_directory(source.parent)
+            fsync_directory(parent)
+        else:
+            validate_cleanup_directory_matches_entry(
+                tombstone,
+                entry,
+                f"cleanup prepared tombstone {tombstone}",
+            )
+    try:
+        publish_cleanup_journal(target, journal_payload, prepare_intent=prepare)
+    except CleanupJournalPublishedPending:
+        return
 
 
 def load_cleanup_journal(target: Path, *, recover_aliases: bool = False) -> dict[str, Any] | None:
@@ -3148,6 +3812,24 @@ def load_cleanup_journal(target: Path, *, recover_aliases: bool = False) -> dict
         return None
     require_real_private_directory(parent, "cleanup pending parent")
     final = cleanup_journal_path(target)
+    prepare = cleanup_prepare_path(target)
+    if not final.exists() and not final.is_symlink():
+        if prepare.exists() or prepare.is_symlink():
+            if not recover_aliases:
+                fail("cleanup preparation recovery requires exclusive target coordination")
+            recover_cleanup_preparation(target)
+        else:
+            if recover_aliases:
+                cleanup_unpublished_prepare_or_journal_temps(parent)
+                if not any(parent.iterdir()):
+                    parent.rmdir()
+                    fsync_directory(target)
+                    return None
+            elif not any(parent.iterdir()):
+                fail("cleanup pending parent contains incomplete cleanup state")
+            if any(parent.iterdir()):
+                fail("cleanup pending parent contains unjournaled state")
+            return None
     if not final.exists() and not final.is_symlink():
         if any(parent.iterdir()):
             fail("cleanup pending parent contains unjournaled state")
@@ -3158,49 +3840,18 @@ def load_cleanup_journal(target: Path, *, recover_aliases: bool = False) -> dict
             recover_cleanup_journal_temp_alias(final, identity_of(before))
         elif before.st_nlink != 1:
             fail("cleanup journal must not have unexpected hard-link aliases")
+        if prepare.exists() or prepare.is_symlink():
+            prepare_info = require_cleanup_prepare_file(prepare)
+            if prepare_info.st_nlink == 2:
+                recover_cleanup_prepare_temp_alias(prepare, identity_of(prepare_info))
+            elif prepare_info.st_nlink != 1:
+                fail("cleanup prepare intent must not have unexpected hard-link aliases")
     payload = read_cleanup_journal_payload(target, final)
-    keys = {
-        "schema_version",
-        "product_name",
-        "build_version",
-        "canonical_target",
-        "cleanup_parent",
-        "max_entries",
-        "serialized_max_bytes",
-        "phase",
-        "entries",
-    }
-    if set(payload) != keys:
-        fail("cleanup journal has invalid keys")
-    if (
-        payload["schema_version"] != CLEANUP_JOURNAL_SCHEMA
-        or payload["product_name"] != PRODUCT_NAME
-        or payload["canonical_target"] != str(target)
-        or payload["cleanup_parent"] != CLEANUP_PARENT_NAME
-        or payload["max_entries"] != MAX_CLEANUP_PATHS
-        or payload["serialized_max_bytes"] != CLEANUP_JOURNAL_MAX_BYTES
-        or payload["phase"] != "ready"
-    ):
-        fail("cleanup journal identity or binding is invalid")
-    entries = payload["entries"]
-    if not isinstance(entries, list) or not entries or len(entries) > MAX_CLEANUP_PATHS:
-        fail("cleanup journal entry count is invalid")
-    seen: set[str] = set()
-    for index, raw_entry in enumerate(entries):
-        entry = validate_cleanup_entry_shape(raw_entry)
-        if entry["relative_name"] != cleanup_relative_name(index, str(entry["category"])):
-            fail("cleanup journal tombstone order mismatch")
-        if entry["relative_name"] in seen:
-            fail("cleanup journal has duplicate tombstone names")
-        seen.add(entry["relative_name"])
-        validate_cleanup_tombstone_identity(target, entry)
-    allowed = {CLEANUP_JOURNAL_NAME, *seen}
-    for child in parent.iterdir():
-        if child.name.startswith(f".{CLEANUP_JOURNAL_NAME}."):
-            fail("cleanup pending parent contains unpublished journal state")
-        if child.name not in allowed:
-            fail(f"cleanup pending parent contains unknown state: {child.name}")
-    return payload
+    return validate_cleanup_journal_payload(
+        target,
+        payload,
+        prepare_intent=prepare if prepare.exists() or prepare.is_symlink() else None,
+    )
 
 
 def cleanup_pending_state(target: Path) -> dict[str, Any]:
@@ -3248,6 +3899,7 @@ def promote_cleanup_tombstones(
     for source in existing_sources:
         remember_directory(source.parent, f"cleanup source parent {source.parent}")
     entries: list[dict[str, Any]] = []
+    source_records: list[dict[str, Any]] = []
     planned_moves: list[tuple[Path, Path]] = []
     for index, source in enumerate(existing_sources):
         entry = cleanup_entry_for_path(target, source, index=index)
@@ -3255,6 +3907,7 @@ def promote_cleanup_tombstones(
         if tombstone.exists() or tombstone.is_symlink():
             fail(f"cleanup tombstone already exists: {entry['relative_name']}")
         entries.append(entry)
+        source_records.append(cleanup_prepare_source_record(target, source, entry))
         planned_moves.append((source, tombstone))
     payload = cleanup_journal_payload(target, entries)
     ensure_target_private_directory(
@@ -3266,17 +3919,37 @@ def promote_cleanup_tombstones(
     if any(parent.iterdir()):
         fail("cleanup pending parent contains unjournaled state")
     moved: list[tuple[Path, Path]] = []
+    prepare = cleanup_prepare_path(target)
     try:
+        try:
+            publish_cleanup_prepare(
+                target,
+                cleanup_prepare_payload(target, payload, source_records),
+            )
+        except CleanupPreparePublishedPending:
+            try:
+                recover_cleanup_preparation(target)
+            except CleanupJournalPublishedInvalid:
+                raise
+            except BaseException as exc:
+                raise CleanupPreparePublishedPending(
+                    f"cleanup prepare recovery remains pending: {exc}"
+                ) from exc
+            return CleanupPromotionResult(payload=payload, publication_pending=False)
         for source, tombstone in planned_moves:
             os.replace(source, tombstone)
             moved.append((tombstone, source))
             fsync_directory(source.parent)
             fsync_directory(parent)
         try:
-            publish_cleanup_journal(target, payload)
+            publish_cleanup_journal(target, payload, prepare_intent=prepare)
         except CleanupJournalPublishedPending:
             return CleanupPromotionResult(payload=payload, publication_pending=True)
         return CleanupPromotionResult(payload=payload, publication_pending=False)
+    except CleanupJournalPublishedInvalid:
+        raise
+    except CleanupPreparePublishedPending:
+        raise
     except BaseException:
         for tombstone, source in reversed(moved):
             if tombstone.exists() or tombstone.is_symlink():
@@ -3285,6 +3958,11 @@ def promote_cleanup_tombstones(
                 os.replace(tombstone, source)
                 fsync_directory(tombstone.parent)
                 fsync_directory(source.parent)
+        cleanup_unpublished_prepare_or_journal_temps(parent)
+        if prepare.exists() or prepare.is_symlink():
+            require_regular_file(prepare, CLEANUP_PREPARE_NAME, private=True)
+            prepare.unlink()
+            fsync_directory(parent)
         if not any(parent.iterdir()):
             if parent_existed:
                 label, snapshot = directory_snapshots[parent]
@@ -3361,7 +4039,12 @@ def drain_cleanup_pending(
             return True
         fail("cleanup pending state could not be drained")
     journal = cleanup_journal_path(target)
+    prepare = cleanup_prepare_path(target)
     try:
+        if prepare.exists() or prepare.is_symlink():
+            read_cleanup_prepare_payload(target, prepare, expected_journal=payload)
+            prepare.unlink()
+            fsync_directory(cleanup_parent(target))
         require_regular_file(journal, CLEANUP_JOURNAL_NAME, private=True)
         journal.unlink()
         fsync_directory(cleanup_parent(target))
@@ -3394,6 +4077,8 @@ def finish_deferred_cleanup(
         promotion = promote_cleanup_tombstones(
             target, [path for path, _point, _injector in normalized]
         )
+    except CleanupJournalPublishedInvalid:
+        raise
     except BaseException:
         if load_cleanup_journal(target, recover_aliases=True) is not None:
             return True
@@ -5479,6 +6164,8 @@ def launch(target: Path, child_args: list[str], *, host: dict[str, Any] | None =
     _ = host if host is not None else detect_supported_host()
     with target_locks(target, create_target=False) as locked_target:
         target = locked_target
+        load_cleanup_journal(target, recover_aliases=True)
+        drain_cleanup_pending(target, allow_pending=False)
         status = current_status(target)
         if not status.get("managed") or status.get("legacy") or status.get("drift"):
             fail("launch requires a current clean managed setup target")
@@ -5572,6 +6259,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         return build_parser().parse_args(list(actual))
     finally:
         PARSER_ARGV_FOR_JSON = previous
+
+
+def require_prechecked_host(host: dict[str, Any] | None) -> dict[str, Any]:
+    if host is None:
+        fail("supported host precheck did not run")
+    return host
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -5691,11 +6384,15 @@ def main(argv: list[str] | None = None) -> int:
                     payload = remove_target(target)
                 elif command == "install-cli":
                     payload = install_cli(
-                        target, update=False, host_detector=lambda: prechecked_host
+                        target,
+                        update=False,
+                        host_detector=lambda host=prechecked_host: require_prechecked_host(host),
                     )
                 elif command == "update-cli":
                     payload = install_cli(
-                        target, update=True, host_detector=lambda: prechecked_host
+                        target,
+                        update=True,
+                        host_detector=lambda host=prechecked_host: require_prechecked_host(host),
                     )
                 elif command == "remove-cli":
                     payload = remove_cli(target)

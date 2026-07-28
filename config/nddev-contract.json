@@ -45,6 +45,7 @@
     "anchor_publication": "atomic-durable-no-replace",
     "cleanup_pending_read_only_mutates": false,
     "cleanup_pending_top_level": true,
+    "launch_drains_cleanup_before_runtime": true,
     "cleanup_journal": {
       "schema": 1,
       "parent": ".nddev-opencode-cleanup-pending",
@@ -54,6 +55,7 @@
       "max_entries": 8,
       "max_objects": 512,
       "serialized_max_bytes": 1048576,
+      "pre_move_recovery_intent": "durable-before-first-source-move",
       "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
       "status_plan_expose_paths": false,
       "mutation_drains_before_active_changes": true

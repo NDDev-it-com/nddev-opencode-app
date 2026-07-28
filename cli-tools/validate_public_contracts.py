@@ -449,7 +449,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("build/manifest.json: profile_ids mismatch")
     if manifest.get("default_profile") != DEFAULT_PROFILE:
         errors.append("build/manifest.json: default_profile mismatch")
-    if manifest.get("managed_files")[: len(MANAGED_FILES)] != MANAGED_FILES:
+    managed_files = manifest.get("managed_files")
+    if not isinstance(managed_files, list) or managed_files[: len(MANAGED_FILES)] != MANAGED_FILES:
         errors.append("build/manifest.json: managed_files mismatch")
     command_policy = manifest.get("command_policy") or {}
     expected_json_commands = [
@@ -490,6 +491,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("build/manifest.json: read-only cleanup-pending mutation mismatch")
     if command_policy.get("cleanup_pending_top_level") is not True:
         errors.append("build/manifest.json: top-level cleanup_pending contract missing")
+    if command_policy.get("launch_drains_cleanup_before_runtime") is not True:
+        errors.append("build/manifest.json: launch cleanup drain contract missing")
     cleanup_journal = command_policy.get("cleanup_journal") or {}
     if cleanup_journal != {
         "schema": 1,
@@ -500,6 +503,7 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         "max_entries": 8,
         "max_objects": 512,
         "serialized_max_bytes": 1048576,
+        "pre_move_recovery_intent": "durable-before-first-source-move",
         "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
         "status_plan_expose_paths": False,
         "mutation_drains_before_active_changes": True,
@@ -711,6 +715,8 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: read-only cleanup-pending mutation mismatch")
     if setup.get("cleanup_pending_top_level") is not True:
         errors.append("config/nddev-contract.json: top-level cleanup_pending contract missing")
+    if setup.get("launch_drains_cleanup_before_runtime") is not True:
+        errors.append("config/nddev-contract.json: launch cleanup drain contract missing")
     cleanup_journal = setup.get("cleanup_journal") or {}
     if cleanup_journal != {
         "schema": 1,
@@ -721,6 +727,7 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "max_entries": 8,
         "max_objects": 512,
         "serialized_max_bytes": 1048576,
+        "pre_move_recovery_intent": "durable-before-first-source-move",
         "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
         "status_plan_expose_paths": False,
         "mutation_drains_before_active_changes": True,
@@ -1974,7 +1981,7 @@ def check_backup_validation_smokes(manager: Any, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-backup-mode-") as raw:
         target = Path(raw) / "target"
         make_private_dir(target)
-        valid_files = {
+        valid_files: dict[str, str | None] = {
             relative: None for relative in (*manager.KNOWN_MANAGED_FILES, manager.STAMP_NAME)
         }
         write_manual_backup(manager, target, 0, valid_files)
@@ -1995,7 +2002,7 @@ def check_backup_validation_smokes(manager: Any, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-backup-base-") as raw:
         target = Path(raw) / "target"
         make_private_dir(target)
-        valid_files = {
+        valid_files: dict[str, str | None] = {
             relative: None for relative in (*manager.KNOWN_MANAGED_FILES, manager.STAMP_NAME)
         }
         write_manual_backup(manager, target, 0, valid_files)
@@ -2068,7 +2075,7 @@ def check_backup_validation_smokes(manager: Any, errors: list[str]) -> None:
         with tempfile.TemporaryDirectory(prefix="nddev-opencode-backup-variant-") as raw:
             target = Path(raw) / "target"
             make_private_dir(target)
-            valid_files = {
+            valid_files: dict[str, str | None] = {
                 relative: None for relative in (*manager.KNOWN_MANAGED_FILES, manager.STAMP_NAME)
             }
             write_manual_backup(manager, target, 0, valid_files)
@@ -2092,7 +2099,7 @@ def check_backup_validation_smokes(manager: Any, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-backup-shape-") as raw:
         target = Path(raw) / "target"
         make_private_dir(target)
-        valid_files = {
+        valid_files: dict[str, str | None] = {
             relative: None for relative in (*manager.KNOWN_MANAGED_FILES, manager.STAMP_NAME)
         }
         write_manual_backup(manager, target, 0, valid_files)
@@ -2166,7 +2173,7 @@ def check_restore_transaction_smokes(manager: Any, errors: list[str]) -> None:
         root = Path(raw)
         target = root / "target"
         manager.install_or_switch(target, manager.render_profile("full-auto"), operation="install")
-        absent_files = {
+        absent_files: dict[str, str | None] = {
             relative: None for relative in (*manager.KNOWN_MANAGED_FILES, manager.STAMP_NAME)
         }
         write_manual_backup(manager, target, 0, absent_files)
@@ -2518,7 +2525,7 @@ def check_platform_preflight_smokes(manager: Any, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-platform-install-") as raw:
         root = Path(raw)
         target = root / "target"
-        called = {"metadata": False, "download": False}
+        preflight_called: dict[str, bool] = {"metadata": False, "download": False}
 
         def unsupported_host() -> dict[str, Any]:
             return manager.select_supported_host(
@@ -2530,11 +2537,11 @@ def check_platform_preflight_smokes(manager: Any, errors: list[str]) -> None:
             )
 
         def metadata_fetcher() -> dict[str, Any]:
-            called["metadata"] = True
+            preflight_called["metadata"] = True
             return {}
 
         def artifact_downloader(url: str, destination: Path, expected_size: int) -> None:
-            called["download"] = True
+            preflight_called["download"] = True
             raise manager.ManagerError("download should not run")
 
         before = state_bundle_signature(manager, root, target)
@@ -2551,7 +2558,7 @@ def check_platform_preflight_smokes(manager: Any, errors: list[str]) -> None:
             ),
             contains="non-ubuntu-linux",
         )
-        if called["metadata"] or called["download"]:
+        if preflight_called["metadata"] or preflight_called["download"]:
             errors.append("platform install preflight: network/download callback ran")
         if state_bundle_signature(manager, root, target) != before:
             errors.append("platform install preflight: target/stage changed")
@@ -3000,10 +3007,10 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
         target = make_private_dir(Path(raw) / "target")
         seed_current_software(manager, target, current=True)
         before = identity_mtime_signature(manager, target)
-        called = {"metadata": False}
+        software_noop_called: dict[str, bool] = {"metadata": False}
 
         def metadata_fetcher() -> dict[str, Any]:
-            called["metadata"] = True
+            software_noop_called["metadata"] = True
             raise manager.ManagerError("metadata should not be fetched for no-op")
 
         for update in (False, True):
@@ -3019,7 +3026,7 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
             )
             if result.get("changed") is not False:
                 errors.append(f"software no-op update={update}: expected changed=false")
-        if called["metadata"]:
+        if software_noop_called["metadata"]:
             errors.append("software no-op fetched metadata")
         if identity_mtime_signature(manager, target) != before:
             errors.append("software no-op changed inode/mtime/content")

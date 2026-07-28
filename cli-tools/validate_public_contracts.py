@@ -1569,6 +1569,14 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
         before_backup = path_signature(manager, manager.backup_root(target))
         original_detect = manager.detect_supported_host
         manager.detect_supported_host = fake_host
+        lock_root_existed = (
+            manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        )
+        coordination_lock = manager.coordination_lock_path()
+        coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
+        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+        external_lock = manager.system_lock_root() / f"{token}.lock"
+        external_existed = external_lock.exists() or external_lock.is_symlink()
         try:
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -1581,6 +1589,12 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
                     errors.append("CLI target-only update did not preserve safe no-op identity")
         finally:
             manager.detect_supported_host = original_detect
+            try:
+                cleanup_validator_lock_file(manager, external_lock, external_existed)
+                cleanup_validator_lock_file(manager, coordination_lock, coordination_existed)
+                cleanup_validator_empty_lock_root(manager, lock_root_existed)
+            except BaseException as exc:  # noqa: BLE001 - cleanup failure is a validator failure.
+                errors.append(f"CLI target-only update lock cleanup failed: {exc}")
         stamp = manager.load_stamp(target)
         if stamp is None or stamp.get("profile_id") != "safe":
             errors.append("CLI target-only update changed installed profile")

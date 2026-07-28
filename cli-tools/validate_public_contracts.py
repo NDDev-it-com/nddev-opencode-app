@@ -169,6 +169,38 @@ EXPECTED_PRODUCT_UNSUPPORTED_CLI_ASSETS = {
             "product_supported": False,
             "unsupported_category": "windows",
         },
+    },
+    "linux-musl": {
+        "linux-arm64-musl": {
+            "id": 492336443,
+            "name": "opencode-linux-arm64-musl.tar.gz",
+            "size": 61339081,
+            "sha256": "c44352641abb0657f16d110b898772b69cb6ea0a5aad683c84e393e73e4543d6",
+            "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64-musl.tar.gz",
+            "format": "tar.gz",
+            "product_supported": False,
+            "unsupported_category": "linux-musl",
+        },
+        "linux-x64-baseline-musl": {
+            "id": 492336400,
+            "name": "opencode-linux-x64-baseline-musl.tar.gz",
+            "size": 61767670,
+            "sha256": "56828e3e68f34c686a41d01b37b7a64166e5f7ad5889fe2164a2a2b9ea563ee0",
+            "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline-musl.tar.gz",
+            "format": "tar.gz",
+            "product_supported": False,
+            "unsupported_category": "linux-musl",
+        },
+        "linux-x64-musl": {
+            "id": 492336437,
+            "name": "opencode-linux-x64-musl.tar.gz",
+            "size": 61767670,
+            "sha256": "7e7a991aff33ae330308e88bfa8e6a5ea4125b468f4de6657b93d76200897a41",
+            "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-musl.tar.gz",
+            "format": "tar.gz",
+            "product_supported": False,
+            "unsupported_category": "linux-musl",
+        },
     }
 }
 EXPECTED_UPSTREAM_DISTRIBUTION_OBSERVATION = {
@@ -362,6 +394,8 @@ def check_release(
         errors.append("build/version.json: upstream distribution observation mismatch")
     if version.get("artifact_product_host_map") != EXPECTED_ARTIFACT_PRODUCT_HOST_MAP:
         errors.append("build/version.json: artifact_product_host_map mismatch")
+    if version.get("python_requires") != ">=3.9":
+        errors.append("build/version.json: python_requires must be >=3.9")
     npm = version.get("npm_observation")
     if not isinstance(npm, dict) or npm.get("install_channel") != "not-used-by-nddev-0.2.0":
         errors.append("build/version.json: npm must be observational only")
@@ -565,6 +599,7 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         "digests_exact_present_files",
         "restore_transaction_rollback",
         "transactional_slot_replacement",
+        "rollback_preserves_object_graph_identity",
         "rollback_fault_retry",
         "final_cleanup_required",
         "cleanup_retry",
@@ -636,6 +671,7 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "backup_files_exact_known_paths",
         "backup_sizes_exact_present_files",
         "backup_digests_exact_present_files",
+        "backup_rollback_preserves_object_graph_identity",
     ):
         if managed.get(key) is not True:
             errors.append(f"config/nddev-contract.json: managed_state.{key} required")
@@ -748,6 +784,7 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "backup_files_exact_known_paths",
         "backup_sizes_exact_present_files",
         "backup_digests_exact_present_files",
+        "backup_rollback_preserves_object_graph_identity",
     ):
         if safety.get(key) is not True:
             errors.append(f"config/nddev-contract.json: safety.{key} required")
@@ -792,6 +829,41 @@ def load_manager(errors: list[str]) -> Any:
         errors.append(f"cli-tools/nddev_opencode.py: import failed: {exc}")
         return None
     return module
+
+
+def check_python39_import_smoke(errors: list[str]) -> None:
+    interpreter = Path("/usr/bin/python3")
+    if not interpreter.is_file():
+        errors.append("/usr/bin/python3: required Python 3.9 import smoke interpreter is missing")
+        return
+    manager_path = ROOT / "cli-tools" / "nddev_opencode.py"
+    command = "\n".join(
+        (
+            "import importlib.util, pathlib, sys",
+            "if sys.version_info[:2] != (3, 9):",
+            "    raise SystemExit('expected /usr/bin/python3 3.9, got %d.%d' % sys.version_info[:2])",
+            f"path = pathlib.Path({str(manager_path)!r})",
+            "spec = importlib.util.spec_from_file_location('nddev_opencode_python39_smoke', path)",
+            "module = importlib.util.module_from_spec(spec)",
+            "sys.modules[spec.name] = module",
+            "spec.loader.exec_module(module)",
+            "assert module.OPENCODE_VERSION == '1.18.8'",
+        )
+    )
+    completed = subprocess.run(
+        [str(interpreter), "-B", "-c", command],
+        cwd=str(ROOT),
+        env=subprocess_clean_env({"PYTHONPATH": ""}),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    if completed.returncode != 0:
+        errors.append(
+            "/usr/bin/python3 Python 3.9 import smoke failed: "
+            + (completed.stderr or completed.stdout).strip()
+        )
 
 
 def python_cli_argv(script: Path, *args: str) -> list[str]:
@@ -2915,6 +2987,7 @@ def main() -> int:
     check_release(version, baseline, errors)
     check_manifest(manifest, errors)
     check_contract(contract, errors)
+    check_python39_import_smoke(errors)
     check_host_selection_smokes(errors)
     check_adversarial_smokes(errors)
     check_setup(errors)

@@ -120,6 +120,38 @@
           "product_supported": false,
           "unsupported_category": "windows"
         }
+      },
+      "linux-musl": {
+        "linux-arm64-musl": {
+          "id": 492336443,
+          "name": "opencode-linux-arm64-musl.tar.gz",
+          "size": 61339081,
+          "sha256": "c44352641abb0657f16d110b898772b69cb6ea0a5aad683c84e393e73e4543d6",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64-musl.tar.gz",
+          "format": "tar.gz",
+          "product_supported": false,
+          "unsupported_category": "linux-musl"
+        },
+        "linux-x64-baseline-musl": {
+          "id": 492336400,
+          "name": "opencode-linux-x64-baseline-musl.tar.gz",
+          "size": 61767670,
+          "sha256": "56828e3e68f34c686a41d01b37b7a64166e5f7ad5889fe2164a2a2b9ea563ee0",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline-musl.tar.gz",
+          "format": "tar.gz",
+          "product_supported": false,
+          "unsupported_category": "linux-musl"
+        },
+        "linux-x64-musl": {
+          "id": 492336437,
+          "name": "opencode-linux-x64-musl.tar.gz",
+          "size": 61767670,
+          "sha256": "7e7a991aff33ae330308e88bfa8e6a5ea4125b468f4de6657b93d76200897a41",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-musl.tar.gz",
+          "format": "tar.gz",
+          "product_supported": false,
+          "unsupported_category": "linux-musl"
+        }
       }
     }
   },
@@ -200,6 +232,6 @@
     "shasum": "3e9ea464402a8601ca85390d86b31b82e227a4ae",
     "install_channel": "not-used-by-nddev-0.2.0"
   },
-  "python_requires": ">=3.10",
+  "python_requires": ">=3.9",
   "runtime_baseline_ref": "references/opencode-baseline.json"
 }

@@ -27,7 +27,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = (ROOT / "VERSION").read_text(encoding="ascii").strip()
@@ -77,7 +77,8 @@ LEGACY_MANAGED_FILES = (
 KNOWN_MANAGED_FILES = tuple(dict.fromkeys((*MANAGED_FILES, *LEGACY_MANAGED_FILES)))
 CONFIG_MANAGED_KEYS = ("autoupdate", "share", "permission")
 FaultInjector = Callable[[str], None]
-TreeIdentityRow = tuple[str, str, int, tuple[int, int], int, int, str | None]
+TreeIdentityRow = tuple[str, str, int, tuple[int, int], int, int, Optional[str]]
+BackupObjectGraphRow = tuple[str, str, int, tuple[int, int], int, int, Optional[bytes]]
 
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -223,6 +224,36 @@ OBSERVED_UNSUPPORTED_ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "zip",
         "product_supported": False,
         "unsupported_category": "windows",
+    },
+    "linux-arm64-musl": {
+        "id": 492336443,
+        "name": "opencode-linux-arm64-musl.tar.gz",
+        "size": 61339081,
+        "sha256": "c44352641abb0657f16d110b898772b69cb6ea0a5aad683c84e393e73e4543d6",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64-musl.tar.gz",
+        "format": "tar.gz",
+        "product_supported": False,
+        "unsupported_category": "linux-musl",
+    },
+    "linux-x64-baseline-musl": {
+        "id": 492336400,
+        "name": "opencode-linux-x64-baseline-musl.tar.gz",
+        "size": 61767670,
+        "sha256": "56828e3e68f34c686a41d01b37b7a64166e5f7ad5889fe2164a2a2b9ea563ee0",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline-musl.tar.gz",
+        "format": "tar.gz",
+        "product_supported": False,
+        "unsupported_category": "linux-musl",
+    },
+    "linux-x64-musl": {
+        "id": 492336437,
+        "name": "opencode-linux-x64-musl.tar.gz",
+        "size": 61767670,
+        "sha256": "7e7a991aff33ae330308e88bfa8e6a5ea4125b468f4de6657b93d76200897a41",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-musl.tar.gz",
+        "format": "tar.gz",
+        "product_supported": False,
+        "unsupported_category": "linux-musl",
     },
 }
 
@@ -401,12 +432,19 @@ class SoftwareRemoveTransaction:
 
 
 @dataclass(frozen=True)
+class BackupObjectGraphSnapshot:
+    existed: bool
+    rows: tuple[BackupObjectGraphRow, ...]
+
+
+@dataclass(frozen=True)
 class BackupTransaction:
     root: Path
     staging_root: Path
     previous_root: Path
     root_existed: bool
     payloads_before: list[dict[str, Any]]
+    object_graph_before: BackupObjectGraphSnapshot
 
 
 @dataclass(frozen=True)
@@ -1617,6 +1655,100 @@ def backup_pool_payloads(target: Path) -> list[dict[str, Any]]:
     return [load_backup(target, slot) for slot in slots]
 
 
+def snapshot_backup_object_graph(root: Path) -> BackupObjectGraphSnapshot:
+    if not root.exists() and not root.is_symlink():
+        return BackupObjectGraphSnapshot(existed=False, rows=())
+    require_real_private_directory(root, "backup root")
+    rows: list[BackupObjectGraphRow] = []
+    total = 0
+    entries = [root, *sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix())]
+    for item in entries:
+        relative = "." if item == root else item.relative_to(root).as_posix()
+        info = item.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            fail(f"backup object graph must not contain symlinks: {relative}")
+        if stat.S_ISDIR(info.st_mode):
+            require_current_user_owner(info, f"backup object {relative}")
+            if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
+                fail(f"backup object graph directory must have mode 0700: {relative}")
+            rows.append(
+                (
+                    relative,
+                    "dir",
+                    stat.S_IMODE(info.st_mode),
+                    identity_of(info),
+                    info.st_mtime_ns,
+                    0,
+                    None,
+                )
+            )
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            fail(f"backup object graph entry must be a regular file: {relative}")
+        content, final = read_regular_file(
+            item,
+            f"backup object {relative}",
+            private=True,
+            max_bytes=METADATA_MAX_BYTES,
+        )
+        total += len(content)
+        if total > MAX_BACKUPS * METADATA_MAX_BYTES:
+            fail("backup object graph exceeds size limit")
+        rows.append(
+            (
+                relative,
+                "file",
+                stat.S_IMODE(final.st_mode),
+                identity_of(final),
+                final.st_mtime_ns,
+                final.st_size,
+                content,
+            )
+        )
+    return BackupObjectGraphSnapshot(existed=True, rows=tuple(rows))
+
+
+def assert_backup_object_graph(root: Path, expected: BackupObjectGraphSnapshot) -> None:
+    actual = snapshot_backup_object_graph(root)
+    if actual != expected:
+        fail("backup object graph rollback postcondition mismatch")
+
+
+def backup_graph_path(root: Path, relative: str) -> Path:
+    return root if relative == "." else root / safe_relative_path(relative)
+
+
+def restore_backup_object_graph_metadata(
+    root: Path,
+    snapshot: BackupObjectGraphSnapshot,
+    *,
+    fault_injection: FaultInjector | None = None,
+) -> None:
+    if not snapshot.existed:
+        return
+    rows = sorted(snapshot.rows, key=lambda row: (row[0].count("/"), row[0]), reverse=True)
+    file_rows = [row for row in rows if row[1] == "file"]
+    directory_rows = [row for row in rows if row[1] == "dir"]
+    for relative, _kind, mode, identity, mtime_ns, _size, _content in file_rows:
+        path = backup_graph_path(root, relative)
+        info = require_regular_file(path, f"backup object {relative}", private=True)
+        if identity_of(info) != identity:
+            raise ConcurrentTargetChange(f"backup object identity changed during rollback: {relative}")
+        os.chmod(path, mode)
+        current = path.lstat()
+        os.utime(path, ns=(current.st_atime_ns, mtime_ns))
+        maybe_inject_fault(fault_injection, f"rollback-backup:restore-object:{relative}")
+    for relative, _kind, mode, identity, mtime_ns, _size, _content in directory_rows:
+        path = backup_graph_path(root, relative)
+        info = require_real_private_directory(path, f"backup object {relative}")
+        if identity_of(info) != identity:
+            raise ConcurrentTargetChange(f"backup object identity changed during rollback: {relative}")
+        os.chmod(path, mode)
+        current = path.lstat()
+        os.utime(path, ns=(current.st_atime_ns, mtime_ns))
+        maybe_inject_fault(fault_injection, f"rollback-backup:restore-object:{relative}")
+
+
 def prepare_backup_transaction(
     target: Path,
     operation: str,
@@ -1626,6 +1758,7 @@ def prepare_backup_transaction(
     existing = backup_pool_payloads(target)
     snapshot = snapshot_known_files(target)
     root = backup_root(target)
+    object_graph_before = snapshot_backup_object_graph(root)
     stage_name = tempfile.mkdtemp(
         prefix=f".{target.name}.nddev-opencode-backups-stage.",
         dir=str(target.parent),
@@ -1676,8 +1809,9 @@ def prepare_backup_transaction(
         root=root,
         staging_root=staging,
         previous_root=previous,
-        root_existed=root.exists() or root.is_symlink(),
+        root_existed=object_graph_before.existed,
         payloads_before=existing,
+        object_graph_before=object_graph_before,
     )
 
 
@@ -1712,7 +1846,8 @@ def backup_pool_payloads_from_root(target: Path, root: Path) -> list[dict[str, A
 
 
 def assert_backup_pool_state(target: Path, transaction: BackupTransaction) -> None:
-    if transaction.payloads_before:
+    assert_backup_object_graph(transaction.root, transaction.object_graph_before)
+    if transaction.object_graph_before.existed:
         if backup_pool_payloads(target) != transaction.payloads_before:
             fail("backup pool rollback postcondition mismatch")
     elif transaction.root.exists() or transaction.root.is_symlink():
@@ -1744,6 +1879,11 @@ def rollback_backup_transaction(
     if transaction.staging_root.exists() or transaction.staging_root.is_symlink():
         remove_private_tree(transaction.staging_root, "backup staging root")
         maybe_inject_fault(fault_injection, "rollback-backup:remove-staging-root")
+    restore_backup_object_graph_metadata(
+        root,
+        transaction.object_graph_before,
+        fault_injection=fault_injection,
+    )
     assert_backup_pool_state(target, transaction)
     maybe_inject_fault(fault_injection, "rollback-backup:postcondition")
 

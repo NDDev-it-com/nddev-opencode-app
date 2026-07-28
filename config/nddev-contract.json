@@ -95,7 +95,8 @@
     "backup_files_exact_known_paths": true,
     "backup_envelope_schema": 3,
     "backup_sizes_exact_present_files": true,
-    "backup_digests_exact_present_files": true
+    "backup_digests_exact_present_files": true,
+    "backup_rollback_preserves_object_graph_identity": true
   },
   "profiles": {
     "full-auto": {
@@ -262,6 +263,7 @@
     "backup_sizes_exact_present_files": true,
     "backup_digests_exact_present_files": true,
     "backup_transactional_slot_replacement": true,
+    "backup_rollback_preserves_object_graph_identity": true,
     "backup_final_cleanup_required": true,
     "backup_cleanup_retry": true,
     "failed_mutation_writes_backup": false,

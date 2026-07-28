@@ -189,6 +189,7 @@
     "digests_exact_present_files": true,
     "restore_transaction_rollback": true,
     "transactional_slot_replacement": true,
+    "rollback_preserves_object_graph_identity": true,
     "failed_mutation_writes_backup": false,
     "rollback_fault_retry": true,
     "final_cleanup_required": true,

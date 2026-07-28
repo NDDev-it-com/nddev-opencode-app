@@ -201,7 +201,7 @@ EXPECTED_PRODUCT_UNSUPPORTED_CLI_ASSETS = {
             "product_supported": False,
             "unsupported_category": "linux-musl",
         },
-    }
+    },
 }
 EXPECTED_UPSTREAM_DISTRIBUTION_OBSERVATION = {
     "cli_asset_families": ["darwin", "linux-glibc", "linux-musl", "windows", "x64-baseline"],

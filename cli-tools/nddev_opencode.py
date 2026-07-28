@@ -1733,7 +1733,9 @@ def restore_backup_object_graph_metadata(
         path = backup_graph_path(root, relative)
         info = require_regular_file(path, f"backup object {relative}", private=True)
         if identity_of(info) != identity:
-            raise ConcurrentTargetChange(f"backup object identity changed during rollback: {relative}")
+            raise ConcurrentTargetChange(
+                f"backup object identity changed during rollback: {relative}"
+            )
         os.chmod(path, mode)
         current = path.lstat()
         os.utime(path, ns=(current.st_atime_ns, mtime_ns))
@@ -1742,7 +1744,9 @@ def restore_backup_object_graph_metadata(
         path = backup_graph_path(root, relative)
         info = require_real_private_directory(path, f"backup object {relative}")
         if identity_of(info) != identity:
-            raise ConcurrentTargetChange(f"backup object identity changed during rollback: {relative}")
+            raise ConcurrentTargetChange(
+                f"backup object identity changed during rollback: {relative}"
+            )
         os.chmod(path, mode)
         current = path.lstat()
         os.utime(path, ns=(current.st_atime_ns, mtime_ns))

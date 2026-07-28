@@ -693,9 +693,13 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
     if setup.get("update_uses_installed_identity") is not True:
         errors.append("config/nddev-contract.json: setup update must use installed identity")
     if setup.get("read_only_commands_create_product_anchor") is not False:
-        errors.append("config/nddev-contract.json: read-only commands must not create product anchor")
+        errors.append(
+            "config/nddev-contract.json: read-only commands must not create product anchor"
+        )
     if setup.get("read_only_commands_create_target_anchor") is not False:
-        errors.append("config/nddev-contract.json: read-only commands must not create target anchor")
+        errors.append(
+            "config/nddev-contract.json: read-only commands must not create target anchor"
+        )
     if setup.get("monotonic_product_anchor") is not True:
         errors.append("config/nddev-contract.json: monotonic product anchor contract missing")
     if setup.get("monotonic_canonical_target_anchor") is not True:
@@ -1884,7 +1888,10 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
             errors.append("CLI repeated no-op changed target inode/mtime/content")
         if path_signature(manager, manager.backup_root(target)) != before_backup:
             errors.append("CLI repeated no-op changed backup pool")
-        if identity_mtime_nlink_signature(manager, manager.system_lock_root()) != after_first_lock_identity:
+        if (
+            identity_mtime_nlink_signature(manager, manager.system_lock_root())
+            != after_first_lock_identity
+        ):
             errors.append("CLI repeated no-op changed monotonic anchor namespace")
 
         for label, flag, value in (
@@ -2433,7 +2440,9 @@ def check_backup_transaction_smokes(manager: Any, errors: list[str]) -> None:
         plan = manager.plan_payload(target, manager.render_profile("safe"))
         if status.get("cleanup_pending") is not True or plan.get("cleanup_pending") is not True:
             errors.append("backup old-root cleanup fault: status/plan did not expose pending")
-        drained = manager.install_or_switch(target, manager.render_profile("safe"), operation="switch")
+        drained = manager.install_or_switch(
+            target, manager.render_profile("safe"), operation="switch"
+        )
         if (
             drained.get("cleanup_pending") is not False
             or drained.get("changed") is not True
@@ -2978,7 +2987,9 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
                 or drained.get("changed") is not True
                 or manager.cleanup_parent(target).exists()
             ):
-                errors.append("software previous-current cleanup fault: next mutation did not drain")
+                errors.append(
+                    "software previous-current cleanup fault: next mutation did not drain"
+                )
         finally:
             manager.ARTIFACTS["linux-x64"] = original_artifact
 
@@ -3263,20 +3274,30 @@ def check_anchor_publication_recovery_smoke(manager: Any, errors: list[str]) -> 
             first_identity = first.file_identity
             release_errors = manager.release_lock_handle(first)
             if release_errors:
-                errors.append(f"anchor recovery smoke first target release failed: {release_errors[0]}")
+                errors.append(
+                    f"anchor recovery smoke first target release failed: {release_errors[0]}"
+                )
             before = identity_mtime_signature(manager, final)
             second = manager.publish_anchor(final, anchor="target", target_digest=token)
             if second.file_identity != first_identity:
                 errors.append("anchor recovery smoke EEXIST opened a different target anchor")
             release_errors = manager.release_lock_handle(second)
             if release_errors:
-                errors.append(f"anchor recovery smoke second target release failed: {release_errors[0]}")
+                errors.append(
+                    f"anchor recovery smoke second target release failed: {release_errors[0]}"
+                )
             after = identity_mtime_signature(manager, final)
             if after != before:
                 errors.append("anchor recovery smoke EEXIST changed existing target anchor")
-            temp_aliases = [child for child in final.parent.iterdir() if child.name.startswith(f".{final.name}.")]
+            temp_aliases = [
+                child
+                for child in final.parent.iterdir()
+                if child.name.startswith(f".{final.name}.")
+            ]
             if temp_aliases:
-                errors.append(f"anchor recovery smoke left EEXIST temporary aliases: {temp_aliases}")
+                errors.append(
+                    f"anchor recovery smoke left EEXIST temporary aliases: {temp_aliases}"
+                )
         finally:
             manager.system_lock_root = original_lock_root
 
@@ -3331,7 +3352,9 @@ def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
             if handle is not None:
                 release_errors = manager.release_lock_handle(handle)
                 if release_errors:
-                    errors.append(f"read-only seeded lock setup release failed: {release_errors[0]}")
+                    errors.append(
+                        f"read-only seeded lock setup release failed: {release_errors[0]}"
+                    )
                     return
         before_existing = (
             state_bundle_signature(manager, root, target),
@@ -3374,7 +3397,9 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
 
         token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
         seeded_handles = [
-            original_acquire_anchor(manager.coordination_lock_path(), anchor="product", create=True),
+            original_acquire_anchor(
+                manager.coordination_lock_path(), anchor="product", create=True
+            ),
             original_acquire_anchor(
                 manager.system_lock_root() / f"{token}.lock",
                 anchor="target",
@@ -3386,7 +3411,9 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
             if handle is not None:
                 release_errors = manager.release_lock_handle(handle)
                 if release_errors:
-                    errors.append(f"lifecycle order seeded anchor release failed: {release_errors[0]}")
+                    errors.append(
+                        f"lifecycle order seeded anchor release failed: {release_errors[0]}"
+                    )
                     return
 
         def traced_acquire_anchor(path: Path, **kwargs: Any) -> Any:
@@ -3396,9 +3423,7 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
         def traced_resolve_locked(path: Path) -> Path:
             events.append("locked-resolve")
             if not any(event.startswith("anchor:product:") for event in events):
-                errors.append(
-                    "lifecycle order: locked target resolution preceded product anchor"
-                )
+                errors.append("lifecycle order: locked target resolution preceded product anchor")
             return original_resolve_locked(path)
 
         def traced_status(path: Path) -> dict[str, Any]:
@@ -3486,7 +3511,9 @@ def check_cli_failure_lock_cleanup_smoke(manager: Any, errors: list[str]) -> Non
                 continue
             release_errors = manager.release_lock_handle(handle)
             if release_errors:
-                errors.append(f"CLI failure lock cleanup smoke anchor release failed: {release_errors[0]}")
+                errors.append(
+                    f"CLI failure lock cleanup smoke anchor release failed: {release_errors[0]}"
+                )
         lock_root = manager.system_lock_root()
         if lock_root.exists() and any(child.name.startswith(".") for child in lock_root.iterdir()):
             errors.append("CLI failure lock cleanup smoke left temporary lock residue")

@@ -345,6 +345,10 @@ class ConcurrentTargetChange(ManagerError):
     """A target changed while the manager was validating or mutating it."""
 
 
+class CleanupJournalPublishedPending(ManagerError):
+    """Cleanup journal final path is visible; later cleanup must drain it."""
+
+
 class ManagerCliParseError(Exception):
     """A parse-time CLI error that should be rendered by main()."""
 
@@ -407,6 +411,12 @@ class ManagedMutationTransaction:
     undo_root: Path
     snapshot: ManagedStateSnapshot
     expected: dict[str, SnapshotEntry] | None
+
+
+@dataclass(frozen=True)
+class CleanupPromotionResult:
+    payload: dict[str, Any]
+    publication_pending: bool
 
 
 @dataclass(frozen=True)
@@ -2179,7 +2189,11 @@ def install_or_switch(
         cleanup_pending = finish_deferred_cleanup(
             target,
             [
-                (backup_transaction.previous_root, "backup:cleanup-old-root", backup_fault_injection),
+                (
+                    backup_transaction.previous_root,
+                    "backup:cleanup-old-root",
+                    backup_fault_injection,
+                ),
                 (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
             ],
         )
@@ -2344,7 +2358,11 @@ def remove_target(
         cleanup_pending = finish_deferred_cleanup(
             target,
             [
-                (backup_transaction.previous_root, "backup:cleanup-old-root", backup_fault_injection),
+                (
+                    backup_transaction.previous_root,
+                    "backup:cleanup-old-root",
+                    backup_fault_injection,
+                ),
                 (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
             ],
         )
@@ -3015,7 +3033,7 @@ def publish_cleanup_journal(target: Path, payload: dict[str, Any]) -> None:
     content = canonical_json(payload)
     fd = -1
     temporary: Path | None = None
-    linked_final = False
+    final_visible = False
     try:
         fd, temporary_name = tempfile.mkstemp(prefix=f".{CLEANUP_JOURNAL_NAME}.", dir=str(parent))
         temporary = Path(temporary_name)
@@ -3025,22 +3043,30 @@ def publish_cleanup_journal(target: Path, payload: dict[str, Any]) -> None:
         while written < len(content):
             written += os.write(fd, content[written:])
         fsync_file_descriptor(fd)
+        os.close(fd)
+        fd = -1
         os.link(temporary, final)
-        linked_final = True
-        temporary.unlink()
-        fsync_directory(parent)
+        final_visible = True
+        try:
+            temporary.unlink()
+            fsync_directory(parent)
+            read_cleanup_journal_payload(target, final)
+        except BaseException as exc:
+            raise CleanupJournalPublishedPending(
+                f"cleanup journal is pending after final-path publication: {exc}"
+            ) from exc
+    except BaseException:
+        if (
+            not final_visible
+            and temporary is not None
+            and (temporary.exists() or temporary.is_symlink())
+        ):
+            temporary.unlink()
+            fsync_directory(parent)
+        raise
     finally:
         if fd >= 0:
             os.close(fd)
-        if temporary is not None and (temporary.exists() or temporary.is_symlink()):
-            if linked_final:
-                with contextlib.suppress(BaseException):
-                    temporary.unlink()
-                    fsync_directory(parent)
-            else:
-                temporary.unlink()
-                fsync_directory(parent)
-    require_regular_file(final, CLEANUP_JOURNAL_NAME, private=True)
 
 
 def recover_cleanup_journal_temp_alias(final: Path, identity: tuple[int, int]) -> None:
@@ -3178,7 +3204,7 @@ def cleanup_pending_state(target: Path) -> dict[str, Any]:
 def promote_cleanup_tombstones(
     target: Path,
     sources: list[Path],
-) -> dict[str, Any] | None:
+) -> CleanupPromotionResult | None:
     existing_sources = [source for source in sources if source.exists() or source.is_symlink()]
     if not existing_sources:
         return None
@@ -3207,8 +3233,11 @@ def promote_cleanup_tombstones(
             moved.append((tombstone, source))
             entries.append(entry)
         payload = cleanup_journal_payload(target, entries)
-        publish_cleanup_journal(target, payload)
-        return payload
+        try:
+            publish_cleanup_journal(target, payload)
+        except CleanupJournalPublishedPending:
+            return CleanupPromotionResult(payload=payload, publication_pending=True)
+        return CleanupPromotionResult(payload=payload, publication_pending=False)
     except BaseException:
         for tombstone, source in reversed(moved):
             if tombstone.exists() or tombstone.is_symlink():
@@ -3304,16 +3333,20 @@ def finish_deferred_cleanup(
             if category is not None:
                 category_faults[category] = (point, injector)
     try:
-        payload = promote_cleanup_tombstones(target, [path for path, _point, _injector in normalized])
+        promotion = promote_cleanup_tombstones(
+            target, [path for path, _point, _injector in normalized]
+        )
     except BaseException:
         if load_cleanup_journal(target, recover_aliases=True) is not None:
             return True
         raise
-    if payload is None:
+    if promotion is None:
         return False
+    if promotion.publication_pending:
+        return True
     fault_points = {
         str(entry["relative_name"]): category_faults[str(entry["category"])]
-        for entry in payload["entries"]
+        for entry in promotion.payload["entries"]
     }
     return drain_cleanup_pending(
         target,
@@ -5019,17 +5052,6 @@ def publish_anchor(
             assert temporary is not None
             temporary.unlink()
             fsync_directory(path.parent)
-            if parent_snapshot is not None:
-                restore_private_directory_metadata(
-                    path.parent,
-                    parent_snapshot,
-                    f"lock parent {path.parent}",
-                )
-                assert_private_directory_metadata(
-                    path.parent,
-                    parent_snapshot,
-                    f"lock parent {path.parent}",
-                )
             existing = open_existing_anchor(
                 path,
                 anchor=anchor,
@@ -5037,7 +5059,9 @@ def publish_anchor(
                 shared=shared,
             )
             if existing is None:
-                raise ConcurrentTargetChange(f"anchor disappeared after existing publication: {path}")
+                raise ConcurrentTargetChange(
+                    f"anchor disappeared after existing publication: {path}"
+                )
             return existing
         assert temporary is not None
         temporary.unlink()
@@ -5285,7 +5309,12 @@ def read_only_target_locks(target: Path) -> Iterator[Path]:
         )
         if coordination_handle is None:
             cold_no_anchor = True
-            yield resolve_target_locked(target)
+            canonical_target = resolve_target_locked(target)
+            token = sha256_bytes(str(canonical_target).encode("utf-8"))
+            orphan_target_anchor = external_lock_path_for_digest(token)
+            if orphan_target_anchor.exists() or orphan_target_anchor.is_symlink():
+                fail("orphan target anchor exists without product coordination anchor")
+            yield canonical_target
         else:
             canonical_target = resolve_target_locked(target)
             token = sha256_bytes(str(canonical_target).encode("utf-8"))
@@ -5563,7 +5592,9 @@ def main(argv: list[str] | None = None) -> int:
                     ) as locked_target:
                         target = locked_target
                         with internal_target_lock(target, create_target=False):
-                            cleanup_drained = load_cleanup_journal(target, recover_aliases=True) is not None
+                            cleanup_drained = (
+                                load_cleanup_journal(target, recover_aliases=True) is not None
+                            )
                             drain_cleanup_pending(target, allow_pending=False)
                             profile = current_update_profile(target)
                             payload = lifecycle_noop_payload(target, profile, operation="update")

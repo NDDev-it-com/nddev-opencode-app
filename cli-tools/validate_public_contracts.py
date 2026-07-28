@@ -9,8 +9,8 @@ import sys
 
 sys.dont_write_bytecode = True
 
-import importlib.util
 import contextlib
+import importlib.util
 import io
 import json
 import os

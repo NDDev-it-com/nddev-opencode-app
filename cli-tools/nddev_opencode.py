@@ -386,6 +386,7 @@ class DirectorySnapshotEntry:
 @dataclass(frozen=True)
 class ManagedStateSnapshot:
     target_existed: bool
+    target_parent: DirectorySnapshotEntry | None
     files: dict[str, SnapshotEntry]
     directories: dict[str, DirectorySnapshotEntry]
 
@@ -411,6 +412,7 @@ class BinaryFileSnapshot:
 @dataclass(frozen=True)
 class SoftwareStateSnapshot:
     target_existed: bool
+    target_parent: DirectorySnapshotEntry | None
     software_root_existed: bool
     current_existed: bool
     current_tree_digest: str | None
@@ -592,6 +594,19 @@ def restore_private_directory_metadata(
         raise ConcurrentTargetChange(f"{label} identity changed during cleanup")
     os.chmod(path, snapshot.mode)
     os.utime(path, ns=(snapshot.atime_ns, snapshot.mtime_ns))
+    fsync_directory(path)
+
+
+def assert_private_directory_metadata(
+    path: Path, snapshot: DirectorySnapshotEntry, label: str
+) -> None:
+    info = require_real_private_directory(path, label)
+    if identity_of(info) != snapshot.identity:
+        fail(f"{label} rollback postcondition identity mismatch")
+    if stat.S_IMODE(info.st_mode) != snapshot.mode:
+        fail(f"{label} rollback postcondition mode mismatch")
+    if info.st_mtime_ns != snapshot.mtime_ns:
+        fail(f"{label} rollback postcondition mtime mismatch")
 
 
 def require_target_contained(target: Path, path: Path, label: str) -> Path:
@@ -1100,6 +1115,7 @@ def snapshot_managed_directories(target: Path) -> dict[str, DirectorySnapshotEnt
 def snapshot_managed_state(target: Path) -> ManagedStateSnapshot:
     return ManagedStateSnapshot(
         target_existed=ensure_target_directory(target, create=False),
+        target_parent=snapshot_private_directory_metadata(target.parent, "target parent"),
         files=snapshot_known_files(target),
         directories=snapshot_managed_directories(target),
     )
@@ -1138,6 +1154,10 @@ def assert_managed_snapshot(target: Path, snapshot: ManagedStateSnapshot) -> Non
     if not snapshot.target_existed:
         if target.exists() or target.is_symlink():
             fail("managed target rollback postcondition expected absence")
+        if snapshot.target_parent is not None:
+            assert_private_directory_metadata(
+                target.parent, snapshot.target_parent, "target parent"
+            )
         return
     require_real_private_directory(target, "target")
     for relative, expected in snapshot.files.items():
@@ -1173,6 +1193,8 @@ def assert_managed_snapshot(target: Path, snapshot: ManagedStateSnapshot) -> Non
             fail(f"managed directory rollback postcondition mode mismatch: {relative}")
         if info.st_mtime_ns != expected_dir.mtime_ns:
             fail(f"managed directory rollback postcondition mtime mismatch: {relative}")
+    if snapshot.target_parent is not None:
+        assert_private_directory_metadata(target.parent, snapshot.target_parent, "target parent")
 
 
 def current_managed_digest(target: Path, relative: str) -> str | None:
@@ -1318,6 +1340,10 @@ def prepare_managed_transaction(
         fsync_directory(stage_root.parent)
     except BaseException:
         cleanup_private_tree_required(stage_root, "managed stage root")
+        if snapshot.target_parent is not None:
+            restore_private_directory_metadata(
+                target.parent, snapshot.target_parent, "target parent"
+            )
         raise
     return ManagedMutationTransaction(
         target=target,
@@ -1421,9 +1447,7 @@ def restore_managed_directory_metadata(
         if expected is None:
             continue
         path = target if relative == "." else target / safe_relative_path(relative)
-        require_real_private_directory(path, f"managed parent {relative}")
-        os.chmod(path, expected.mode)
-        os.utime(path, ns=(expected.atime_ns, expected.mtime_ns))
+        restore_private_directory_metadata(path, expected, f"managed parent {relative}")
         maybe_inject_fault(fault_injection, f"rollback-managed:restore-dir:{relative}")
 
 
@@ -1484,6 +1508,9 @@ def rollback_managed_transaction_once(
         fault_injection=fault_injection,
         fault_point="rollback-managed:remove-stage",
     )
+    if snapshot.target_parent is not None:
+        restore_private_directory_metadata(target.parent, snapshot.target_parent, "target parent")
+        maybe_inject_fault(fault_injection, "rollback-managed:restore-target-parent")
     assert_managed_snapshot(target, snapshot)
     maybe_inject_fault(fault_injection, "rollback-managed:postcondition")
 
@@ -1763,6 +1790,7 @@ def prepare_backup_transaction(
     snapshot = snapshot_known_files(target)
     root = backup_root(target)
     object_graph_before = snapshot_backup_object_graph(root)
+    target_parent = snapshot_private_directory_metadata(target.parent, "target parent")
     stage_name = tempfile.mkdtemp(
         prefix=f".{target.name}.nddev-opencode-backups-stage.",
         dir=str(target.parent),
@@ -1808,6 +1836,8 @@ def prepare_backup_transaction(
         maybe_inject_fault(fault_injection, "backup:prepare-postcondition")
     except BaseException:
         cleanup_private_tree_required(staging, "backup staging root")
+        if target_parent is not None:
+            restore_private_directory_metadata(target.parent, target_parent, "target parent")
         raise
     return BackupTransaction(
         root=root,
@@ -2441,6 +2471,7 @@ def snapshot_software_state(target: Path) -> SoftwareStateSnapshot:
     current_exists = software_current(target).exists() or software_current(target).is_symlink()
     return SoftwareStateSnapshot(
         target_existed=ensure_target_directory(target, create=False),
+        target_parent=snapshot_private_directory_metadata(target.parent, "target parent"),
         software_root_existed=(
             software_root(target).exists() or software_root(target).is_symlink()
         ),
@@ -2597,14 +2628,18 @@ def restore_software_directory_metadata(
     *,
     fault_injection: FaultInjector | None = None,
 ) -> None:
-    if not snapshot.target_existed:
-        return
-    paths = software_directory_paths(target)
-    for relative in sorted(snapshot.directories, key=lambda value: value.count("/"), reverse=True):
-        expected = snapshot.directories[relative]
-        path = paths[relative]
-        restore_private_directory_metadata(path, expected, f"software directory {relative}")
-        maybe_inject_fault(fault_injection, f"rollback-software:restore-dir:{relative}")
+    if snapshot.target_existed:
+        paths = software_directory_paths(target)
+        for relative in sorted(
+            snapshot.directories, key=lambda value: value.count("/"), reverse=True
+        ):
+            expected = snapshot.directories[relative]
+            path = paths[relative]
+            restore_private_directory_metadata(path, expected, f"software directory {relative}")
+            maybe_inject_fault(fault_injection, f"rollback-software:restore-dir:{relative}")
+    if snapshot.target_parent is not None:
+        restore_private_directory_metadata(target.parent, snapshot.target_parent, "target parent")
+        maybe_inject_fault(fault_injection, "rollback-software:restore-target-parent")
 
 
 def restore_software_state(
@@ -2702,6 +2737,10 @@ def assert_software_snapshot(target: Path, snapshot: SoftwareStateSnapshot) -> N
     if not snapshot.target_existed:
         if target.exists() or target.is_symlink():
             fail("software target rollback postcondition expected absence")
+        if snapshot.target_parent is not None:
+            assert_private_directory_metadata(
+                target.parent, snapshot.target_parent, "target parent"
+            )
         return
     require_real_private_directory(target, "target")
     for path, existed, label in (
@@ -2749,6 +2788,8 @@ def assert_software_snapshot(target: Path, snapshot: SoftwareStateSnapshot) -> N
             fail(f"software directory rollback postcondition mode mismatch: {relative}")
         if info.st_mtime_ns != expected.mtime_ns:
             fail(f"software directory rollback postcondition mtime mismatch: {relative}")
+    if snapshot.target_parent is not None:
+        assert_private_directory_metadata(target.parent, snapshot.target_parent, "target parent")
 
 
 def rollback_software_state(
@@ -3860,6 +3901,7 @@ def cleanup_created_lock(handle: LockHandle) -> None:
 def internal_target_lock(target: Path, *, create_target: bool) -> Iterator[Path]:
     internal_handle: LockHandle | None = None
     target_existed = target.exists() or target.is_symlink()
+    target_parent_snapshot = snapshot_private_directory_metadata(target.parent, "target parent")
     success = False
     try:
         target_exists = ensure_target_directory(target, create=create_target)
@@ -3883,6 +3925,10 @@ def internal_target_lock(target: Path, *, create_target: bool) -> Iterator[Path]
                 try:
                     target.rmdir()
                     fsync_directory(target.parent)
+                    if target_parent_snapshot is not None:
+                        restore_private_directory_metadata(
+                            target.parent, target_parent_snapshot, "target parent"
+                        )
                 except BaseException as exc:
                     cleanup_errors.append(exc)
             if cleanup_errors:
@@ -4067,8 +4113,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("update", help="refresh the installed managed setup/profile")
     add_target(p)
-    p.add_argument("--setup", choices=[CONTENT_SETUP_ID], help=argparse.SUPPRESS)
-    p.add_argument("--profile", choices=PROFILE_IDS, help=argparse.SUPPRESS)
     add_json(p)
 
     p = sub.add_parser("migrate", help="migrate a legacy schema-1 target")
@@ -4156,8 +4200,6 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     payload = plan_payload(target, render_profile(args.profile))
         elif command == "update":
-            if args.setup is not None or args.profile is not None:
-                fail("update reads the installed setup/profile; use switch to change profile")
             with target_locks(target, create_target=False, lock_internal=False) as locked_target:
                 target = locked_target
                 profile = current_update_profile(target)

@@ -17,6 +17,8 @@ import os
 import stat
 import subprocess
 import tempfile
+import threading
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -1184,12 +1186,44 @@ def identity_mtime_signature(manager: Any, path: Path) -> Any:
     return rows
 
 
+def stable_snapshot(label: str, callback: Any, *, attempts: int = 32) -> Any:
+    delay = 0.001
+    last_error: BaseException | None = None
+    for _attempt in range(attempts):
+        try:
+            first = callback()
+            second = callback()
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            last_error = exc
+        else:
+            if first == second:
+                return first
+            last_error = RuntimeError(f"{label} changed during snapshot")
+        time.sleep(delay)
+        delay = min(delay * 2, 0.02)
+    raise RuntimeError(f"{label} did not stabilize after {attempts} attempts: {last_error}")
+
+
 def state_bundle_signature(manager: Any, root: Path, target: Path) -> Any:
     return {
-        "root_topology": path_signature(manager, root),
-        "target": identity_mtime_signature(manager, target),
-        "backup": identity_mtime_signature(manager, manager.backup_root(target)),
-        "lock_root": identity_mtime_signature(manager, manager.system_lock_root()),
+        "root_topology": stable_snapshot(
+            f"root topology {root}", lambda: path_signature(manager, root)
+        ),
+        "target": stable_snapshot(
+            f"target identity {target}", lambda: identity_mtime_signature(manager, target)
+        ),
+        "target_parent": stable_snapshot(
+            f"target parent identity {target.parent}",
+            lambda: identity_mtime_signature(manager, target.parent),
+        ),
+        "backup": stable_snapshot(
+            f"backup identity {manager.backup_root(target)}",
+            lambda: identity_mtime_signature(manager, manager.backup_root(target)),
+        ),
+        "lock_root": stable_snapshot(
+            f"lock root identity {manager.system_lock_root()}",
+            lambda: identity_mtime_signature(manager, manager.system_lock_root()),
+        ),
     }
 
 
@@ -1675,25 +1709,46 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
         if path_signature(manager, manager.backup_root(target)) != before_backup:
             errors.append("CLI target-only update changed backup pool")
 
-        original_detect = manager.detect_supported_host
-        manager.detect_supported_host = fake_host
-        try:
-            stderr = io.StringIO()
-            with contextlib.redirect_stderr(stderr):
-                rc = manager.main(
-                    [
-                        "update",
-                        "--target",
-                        str(target),
-                        "--profile",
-                        "full-auto",
-                        "--json",
-                    ]
-                )
-            if rc != 2:
-                errors.append("CLI update with selection flags must be rejected")
-        finally:
-            manager.detect_supported_host = original_detect
+        for label, flag, value in (
+            ("profile", "--profile", "full-auto"),
+            ("setup", "--setup", "nddev-builder"),
+        ):
+            called: list[str] = []
+            original_detect = manager.detect_supported_host
+            original_resolve = manager.resolve_target
+
+            def forbidden_detect() -> dict[str, Any]:
+                called.append("host")
+                raise manager.ManagerError("host must not run after parser failure")
+
+            def forbidden_resolve(raw_target: str | None) -> Path:
+                called.append(f"resolve:{raw_target}")
+                raise manager.ManagerError("resolve_target must not run after parser failure")
+
+            manager.detect_supported_host = forbidden_detect
+            manager.resolve_target = forbidden_resolve
+            try:
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    rc = manager.main(
+                        [
+                            "update",
+                            "--target",
+                            str(target),
+                            flag,
+                            value,
+                            "--json",
+                        ]
+                    )
+                if rc != 2:
+                    errors.append(f"CLI update with --{label} must return parser code 2")
+                if "unrecognized arguments" not in stderr.getvalue():
+                    errors.append(f"CLI update with --{label} must be an argparse error")
+                if called:
+                    errors.append(f"CLI update with --{label} ran pre-parser work: {called}")
+            finally:
+                manager.detect_supported_host = original_detect
+                manager.resolve_target = original_resolve
         if manager.load_stamp(target).get("profile_id") != "safe":
             errors.append("CLI update with selection flags changed installed profile")
 
@@ -2416,6 +2471,92 @@ def _raise_inside_lock(manager: Any, target: Path, create_target: bool) -> None:
         raise manager.ManagerError("validator lock failure")
 
 
+def check_state_snapshot_churn_smokes(manager: Any, errors: list[str]) -> None:
+    with tempfile.TemporaryDirectory(prefix="nddev-opencode-validator-churn-") as raw:
+        root = Path(raw)
+        target = root / "target"
+        lock_root = make_private_dir(root / "locks")
+        original_lock_root = manager.system_lock_root
+        manager.system_lock_root = lambda: lock_root
+        try:
+            original_identity = globals()["identity_mtime_signature"]
+            injected = {"seen": False}
+
+            def flaky_identity(manager_arg: Any, path: Path) -> Any:
+                if path == lock_root and not injected["seen"]:
+                    injected["seen"] = True
+                    raise FileNotFoundError("deterministic lock churn")
+                return original_identity(manager_arg, path)
+
+            globals()["identity_mtime_signature"] = flaky_identity
+            try:
+                state_bundle_signature(manager, root, target)
+            except BaseException as exc:  # noqa: BLE001 - validator reports precise smoke failure.
+                errors.append(f"state snapshot one-shot churn failed: {exc}")
+            finally:
+                globals()["identity_mtime_signature"] = original_identity
+            if not injected["seen"]:
+                errors.append("state snapshot one-shot churn fault was not reached")
+
+            stop = threading.Event()
+            worker_errors: list[str] = []
+
+            def churn_lock_root() -> None:
+                index = 0
+                while not stop.is_set():
+                    path = lock_root / f"churn-{index % 8}.lock"
+                    try:
+                        path.write_bytes(b"lock\n")
+                        os.chmod(path, 0o600)
+                        path.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except BaseException as exc:  # noqa: BLE001 - surfaced after join.
+                        worker_errors.append(f"churn writer failed: {exc}")
+                        return
+                    index += 1
+                    time.sleep(0.0005)
+
+            def snapshot_worker() -> None:
+                for _ in range(40):
+                    try:
+                        state_bundle_signature(manager, root, target)
+                    except BaseException as exc:  # noqa: BLE001 - surfaced after join.
+                        worker_errors.append(f"snapshot worker failed: {exc}")
+                        return
+
+            churner = threading.Thread(target=churn_lock_root)
+            workers = [threading.Thread(target=snapshot_worker) for _ in range(4)]
+            churner.start()
+            try:
+                for worker in workers:
+                    worker.start()
+                for worker in workers:
+                    worker.join(timeout=10)
+                    if worker.is_alive():
+                        worker_errors.append("snapshot worker timeout")
+                stop.set()
+                churner.join(timeout=10)
+                if churner.is_alive():
+                    worker_errors.append("churn writer timeout")
+            finally:
+                stop.set()
+                churner.join(timeout=10)
+            for child in list(lock_root.glob("churn-*.lock")):
+                child.unlink(missing_ok=True)
+            if worker_errors:
+                errors.extend(worker_errors)
+            try:
+                lock_signature_value = state_bundle_signature(manager, root, target)["lock_root"]
+            except BaseException as exc:  # noqa: BLE001 - validator reports precise smoke failure.
+                errors.append(f"state snapshot final lock-root check failed: {exc}")
+            else:
+                if lock_signature_value != identity_mtime_signature(manager, lock_root):
+                    errors.append("state snapshot final lock-root signature mismatch")
+        finally:
+            manager.system_lock_root = original_lock_root
+
+
 def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
     fault_points = [
         "software:swap-current",
@@ -2963,6 +3104,7 @@ def check_adversarial_smokes(errors: list[str]) -> None:
     check_platform_preflight_smokes(manager, errors)
     check_lifecycle_order_smoke(manager, errors)
     check_lock_failure_cleanup_smokes(manager, errors)
+    check_state_snapshot_churn_smokes(manager, errors)
     check_software_transaction_smokes(manager, errors)
     check_remove_cli_transaction_smokes(manager, errors)
     check_json_parse_smokes(errors)

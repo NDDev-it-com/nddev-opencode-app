@@ -100,6 +100,20 @@
     "monotonic_product_anchor": true,
     "monotonic_canonical_target_anchor": true,
     "anchor_publication": "atomic-durable-no-replace",
+    "cleanup_pending_read_only_mutates": false,
+    "cleanup_pending_top_level": true,
+    "cleanup_journal": {
+      "schema": 1,
+      "parent": ".nddev-opencode-cleanup-pending",
+      "file": "NDDEV-OPENCODE-CLEANUP.json",
+      "publication": "atomic-durable-no-replace",
+      "hardlink_alias_recovery": "mutation-only",
+      "max_entries": 8,
+      "max_objects": 512,
+      "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
+      "status_plan_expose_paths": false,
+      "mutation_drains_before_active_changes": true
+    },
     "restore_backup_option": "--backup <0..9>",
     "status_executes_binary": false,
     "noop_plan_empty_changes": true,
@@ -168,7 +182,8 @@
       "restores_current_entrypoint_stamp_and_absence": true,
       "rollback_fault_retry": true,
       "final_cleanup_required": true,
-      "cleanup_retry": true
+      "cleanup_retry": true,
+      "cleanup_pending_journal": true
     },
     "staged_version_probe": [
       "bin/opencode",
@@ -202,7 +217,8 @@
     "failed_mutation_writes_backup": false,
     "rollback_fault_retry": true,
     "final_cleanup_required": true,
-    "cleanup_retry": true
+    "cleanup_retry": true,
+    "cleanup_pending_journal": true
   },
   "atomic_write_policy": {
     "order": [

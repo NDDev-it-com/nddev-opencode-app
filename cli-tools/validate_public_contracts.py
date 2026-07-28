@@ -486,6 +486,24 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("build/manifest.json: monotonic target anchor contract missing")
     if command_policy.get("anchor_publication") != "atomic-durable-no-replace":
         errors.append("build/manifest.json: anchor publication contract mismatch")
+    if command_policy.get("cleanup_pending_read_only_mutates") is not False:
+        errors.append("build/manifest.json: read-only cleanup-pending mutation mismatch")
+    if command_policy.get("cleanup_pending_top_level") is not True:
+        errors.append("build/manifest.json: top-level cleanup_pending contract missing")
+    cleanup_journal = command_policy.get("cleanup_journal") or {}
+    if cleanup_journal != {
+        "schema": 1,
+        "parent": ".nddev-opencode-cleanup-pending",
+        "file": "NDDEV-OPENCODE-CLEANUP.json",
+        "publication": "atomic-durable-no-replace",
+        "hardlink_alias_recovery": "mutation-only",
+        "max_entries": 8,
+        "max_objects": 512,
+        "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
+        "status_plan_expose_paths": False,
+        "mutation_drains_before_active_changes": True,
+    }:
+        errors.append("build/manifest.json: cleanup journal contract mismatch")
     if command_policy.get("noop_plan_empty_changes") is not True:
         errors.append("build/manifest.json: no-op plan contract missing")
     if command_policy.get("noop_mutation_writes_backup") is not False:
@@ -599,6 +617,7 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
             "restores_current_entrypoint_stamp_and_absence",
             "final_cleanup_required",
             "cleanup_retry",
+            "cleanup_pending_journal",
         ):
             if transaction.get(key) is not True:
                 errors.append(f"build/manifest.json: transaction_rollback.{key} required")
@@ -683,6 +702,24 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: monotonic target anchor contract missing")
     if setup.get("anchor_publication") != "atomic-durable-no-replace":
         errors.append("config/nddev-contract.json: anchor publication contract mismatch")
+    if setup.get("cleanup_pending_read_only_mutates") is not False:
+        errors.append("config/nddev-contract.json: read-only cleanup-pending mutation mismatch")
+    if setup.get("cleanup_pending_top_level") is not True:
+        errors.append("config/nddev-contract.json: top-level cleanup_pending contract missing")
+    cleanup_journal = setup.get("cleanup_journal") or {}
+    if cleanup_journal != {
+        "schema": 1,
+        "parent": ".nddev-opencode-cleanup-pending",
+        "file": "NDDEV-OPENCODE-CLEANUP.json",
+        "publication": "atomic-durable-no-replace",
+        "hardlink_alias_recovery": "mutation-only",
+        "max_entries": 8,
+        "max_objects": 512,
+        "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
+        "status_plan_expose_paths": False,
+        "mutation_drains_before_active_changes": True,
+    }:
+        errors.append("config/nddev-contract.json: cleanup journal contract mismatch")
     if setup.get("noop_plan_empty_changes") is not True:
         errors.append("config/nddev-contract.json: no-op plan contract missing")
     if setup.get("noop_mutation_writes_backup") is not False:
@@ -795,6 +832,7 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "restores_current_entrypoint_stamp_and_absence",
         "final_cleanup_required",
         "cleanup_retry",
+        "cleanup_pending_journal",
     ):
         if transaction.get(key) is not True:
             errors.append(f"config/nddev-contract.json: transaction_rollback.{key} required")
@@ -826,6 +864,12 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: backup final cleanup contract required")
     if safety.get("backup_cleanup_retry") is not True:
         errors.append("config/nddev-contract.json: backup cleanup retry contract required")
+    if safety.get("cleanup_pending_journal") is not True:
+        errors.append("config/nddev-contract.json: cleanup pending journal safety required")
+    if safety.get("cleanup_pending_read_only_mutates") is not False:
+        errors.append("config/nddev-contract.json: cleanup read-only safety mismatch")
+    if safety.get("cleanup_pending_top_level") is not True:
+        errors.append("config/nddev-contract.json: top-level cleanup_pending safety required")
     if safety.get("failed_mutation_writes_backup") is not False:
         errors.append("config/nddev-contract.json: failed mutation backup safety mismatch")
     if safety.get("atomic_write_order") != [
@@ -1208,6 +1252,76 @@ def identity_mtime_signature(manager: Any, path: Path) -> Any:
         else:
             rows.append(
                 (relative, "other", mode, info.st_ino, info.st_mtime_ns, info.st_size, None)
+            )
+    return rows
+
+
+def identity_mtime_nlink_signature(manager: Any, path: Path) -> Any:
+    if not path.exists() and not path.is_symlink():
+        return None
+    rows: list[tuple[str, str, int, int, int, int, int, int, str | None]] = []
+    entries = [path]
+    if path.is_dir() and not path.is_symlink():
+        entries.extend(sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix()))
+    for item in entries:
+        info = item.lstat()
+        relative = "." if item == path else item.relative_to(path).as_posix()
+        mode = stat.S_IMODE(info.st_mode)
+        if stat.S_ISLNK(info.st_mode):
+            rows.append(
+                (
+                    relative,
+                    "symlink",
+                    mode,
+                    info.st_ino,
+                    info.st_nlink,
+                    info.st_mtime_ns,
+                    info.st_size,
+                    len(os.readlink(item)),
+                    os.readlink(item),
+                )
+            )
+        elif stat.S_ISDIR(info.st_mode):
+            rows.append(
+                (
+                    relative,
+                    "dir",
+                    mode,
+                    info.st_ino,
+                    info.st_nlink,
+                    info.st_mtime_ns,
+                    info.st_size,
+                    0,
+                    None,
+                )
+            )
+        elif stat.S_ISREG(info.st_mode):
+            rows.append(
+                (
+                    relative,
+                    "file",
+                    mode,
+                    info.st_ino,
+                    info.st_nlink,
+                    info.st_mtime_ns,
+                    info.st_size,
+                    info.st_size,
+                    manager.sha256_bytes(item.read_bytes()),
+                )
+            )
+        else:
+            rows.append(
+                (
+                    relative,
+                    "other",
+                    mode,
+                    info.st_ino,
+                    info.st_nlink,
+                    info.st_mtime_ns,
+                    info.st_size,
+                    info.st_size,
+                    None,
+                )
             )
     return rows
 
@@ -1701,14 +1815,6 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
         before_backup = path_signature(manager, manager.backup_root(target))
         original_detect = manager.detect_supported_host
         manager.detect_supported_host = fake_host
-        lock_root_existed = (
-            manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
-        )
-        coordination_lock = manager.coordination_lock_path()
-        coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
-        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
-        external_lock = manager.system_lock_root() / f"{token}.lock"
-        external_existed = external_lock.exists() or external_lock.is_symlink()
         try:
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -1721,12 +1827,35 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
                     errors.append("CLI target-only update did not preserve safe no-op identity")
         finally:
             manager.detect_supported_host = original_detect
+        coordination_lock = manager.coordination_lock_path()
+        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+        external_lock = manager.external_lock_path_for_digest(token)
+        if not coordination_lock.exists() or not external_lock.exists():
+            errors.append("CLI target-only update did not publish monotonic anchors")
+        for label, path, anchor, digest in (
+            ("product", coordination_lock, "product", None),
+            ("target", external_lock, "target", token),
+        ):
             try:
-                cleanup_validator_lock_file(manager, external_lock, external_existed)
-                cleanup_validator_lock_file(manager, coordination_lock, coordination_existed)
-                cleanup_validator_empty_lock_root(manager, lock_root_existed)
-            except BaseException as exc:  # noqa: BLE001 - cleanup failure is a validator failure.
-                errors.append(f"CLI target-only update lock cleanup failed: {exc}")
+                handle = manager.open_existing_anchor(
+                    path,
+                    anchor=anchor,
+                    target_digest=digest,
+                    shared=True,
+                )
+                if handle is None:
+                    errors.append(f"CLI target-only update missing {label} anchor")
+                else:
+                    release_errors = manager.release_lock_handle(handle)
+                    if release_errors:
+                        errors.append(
+                            f"CLI target-only update could not release {label} anchor: {release_errors[0]}"
+                        )
+            except BaseException as exc:  # noqa: BLE001 - validator reports contract failures.
+                errors.append(f"CLI target-only update invalid {label} anchor: {exc}")
+        after_first_lock_identity = identity_mtime_nlink_signature(
+            manager, manager.system_lock_root()
+        )
         stamp = manager.load_stamp(target)
         if stamp is None or stamp.get("profile_id") != "safe":
             errors.append("CLI target-only update changed installed profile")
@@ -1734,6 +1863,29 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
             errors.append("CLI target-only update changed target inode/mtime/content")
         if path_signature(manager, manager.backup_root(target)) != before_backup:
             errors.append("CLI target-only update changed backup pool")
+        manager.detect_supported_host = fake_host
+        try:
+            for command in (
+                ["update", "--target", str(target), "--json"],
+                ["switch", "--target", str(target), "--profile", "safe", "--json"],
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    rc = manager.main(command)
+                if rc != 0:
+                    errors.append(f"CLI repeated no-op command returned {rc}: {' '.join(command)}")
+                    continue
+                payload = json.loads(stdout.getvalue())
+                if payload.get("changed") is not False:
+                    errors.append(f"CLI repeated no-op command changed state: {' '.join(command)}")
+        finally:
+            manager.detect_supported_host = original_detect
+        if identity_mtime_signature(manager, target) != before_identity:
+            errors.append("CLI repeated no-op changed target inode/mtime/content")
+        if path_signature(manager, manager.backup_root(target)) != before_backup:
+            errors.append("CLI repeated no-op changed backup pool")
+        if identity_mtime_nlink_signature(manager, manager.system_lock_root()) != after_first_lock_identity:
+            errors.append("CLI repeated no-op changed monotonic anchor namespace")
 
         for label, flag, value in (
             ("profile", "--profile", "full-auto"),
@@ -2262,7 +2414,11 @@ def check_backup_transaction_smokes(manager: Any, errors: list[str]) -> None:
         )
         if not seen["value"]:
             errors.append("backup old-root cleanup fault: fault point not reached")
-        if result.get("changed") is not True or result.get("backup") != 0:
+        if (
+            result.get("changed") is not True
+            or result.get("backup") != 0
+            or result.get("cleanup_pending") is not True
+        ):
             errors.append("backup old-root cleanup fault: success payload mismatch")
         manager.backup_pool_payloads(target)
         residue = sorted(
@@ -2273,6 +2429,18 @@ def check_backup_transaction_smokes(manager: Any, errors: list[str]) -> None:
         )
         if residue:
             errors.append(f"backup old-root cleanup fault: residue remains {residue}")
+        status = manager.current_status(target)
+        plan = manager.plan_payload(target, manager.render_profile("safe"))
+        if status.get("cleanup_pending") is not True or plan.get("cleanup_pending") is not True:
+            errors.append("backup old-root cleanup fault: status/plan did not expose pending")
+        drained = manager.install_or_switch(target, manager.render_profile("safe"), operation="switch")
+        if (
+            drained.get("cleanup_pending") is not False
+            or drained.get("changed") is not True
+            or drained.get("changes") != ["cleanup-pending"]
+            or manager.cleanup_parent(target).exists()
+        ):
+            errors.append("backup old-root cleanup fault: next mutation did not drain pending")
 
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-backup-full-pool-") as raw:
         root = Path(raw)
@@ -2788,10 +2956,12 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
             manager.ARTIFACTS["linux-x64"] = original_artifact
         if not seen["value"]:
             errors.append("software previous-current cleanup fault: fault point not reached")
-        if result.get("changed") is not True:
+        if result.get("changed") is not True or result.get("cleanup_pending") is not True:
             errors.append("software previous-current cleanup fault: success payload mismatch")
         if status.get("current") is not True:
             errors.append("software previous-current cleanup fault: status drifted")
+        if status.get("cleanup_pending") is not True:
+            errors.append("software previous-current cleanup fault: status did not expose pending")
         previous_residue = [
             child.name
             for child in (target / manager.SOFTWARE_DIR_NAME).iterdir()
@@ -2799,6 +2969,18 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
         ]
         if previous_residue:
             errors.append("software previous-current cleanup fault: previous residue remains")
+        original_artifact = manager.ARTIFACTS["linux-x64"]
+        manager.ARTIFACTS["linux-x64"] = artifact
+        try:
+            drained = manager.install_cli(target, update=True, **fake_install_kwargs(manager))
+            if (
+                drained.get("cleanup_pending") is not False
+                or drained.get("changed") is not True
+                or manager.cleanup_parent(target).exists()
+            ):
+                errors.append("software previous-current cleanup fault: next mutation did not drain")
+        finally:
+            manager.ARTIFACTS["linux-x64"] = original_artifact
 
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-software-noop-") as raw:
         target = make_private_dir(Path(raw) / "target")
@@ -2921,14 +3103,25 @@ def check_remove_cli_transaction_smokes(manager: Any, errors: list[str]) -> None
         result = manager.remove_cli(target, fault_injection=fault)
         if not seen["value"]:
             errors.append("remove-cli cleanup fault: fault point not reached")
-        if result.get("changed") is not True or result.get("removed") is not True:
+        if (
+            result.get("changed") is not True
+            or result.get("removed") is not True
+            or result.get("cleanup_pending") is not True
+        ):
             errors.append("remove-cli cleanup fault: success payload mismatch")
         if manager.software_presence(target):
             errors.append("remove-cli cleanup fault: software presence remains")
-        if remove_cli_stage_residue(manager, target):
-            errors.append("remove-cli cleanup fault: stage residue remains")
+        if manager.software_status_payload(target).get("cleanup_pending") is not True:
+            errors.append("remove-cli cleanup fault: software-status did not expose pending")
         if path_signature(manager, manager.backup_root(target)) is not None:
             errors.append("remove-cli cleanup fault: backup pool changed")
+        drained = manager.remove_cli(target)
+        if (
+            drained.get("cleanup_pending") is not False
+            or drained.get("changed") is not True
+            or manager.cleanup_parent(target).exists()
+        ):
+            errors.append("remove-cli cleanup fault: next mutation did not drain pending")
 
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-remove-cli-noop-") as raw:
         root = Path(raw)

@@ -2223,6 +2223,8 @@ def install_or_switch(
                 (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
             ],
         )
+    except (CleanupJournalPublishedInvalid, CleanupPreparePublishedPending):
+        raise
     except BaseException:
         if backup_transaction is not None:
             cleanup_backup_transaction(
@@ -2328,6 +2330,8 @@ def restore_target(
         )
         assert_desired_managed_state(target, desired)
         cleanup_pending = commit_managed_transaction(transaction, fault_injection=fault_injection)
+    except (CleanupJournalPublishedInvalid, CleanupPreparePublishedPending):
+        raise
     except BaseException:
         rollback_managed_transaction(transaction, fault_injection=rollback_fault_injection)
         raise
@@ -2408,6 +2412,8 @@ def remove_target(
                 (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
             ],
         )
+    except (CleanupJournalPublishedInvalid, CleanupPreparePublishedPending):
+        raise
     except BaseException:
         if backup_transaction is not None:
             cleanup_backup_transaction(

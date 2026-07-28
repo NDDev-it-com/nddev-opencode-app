@@ -1339,8 +1339,15 @@ def identity_mtime_nlink_signature(manager: Any, path: Path) -> Any:
     return rows
 
 
-def stable_snapshot(label: str, callback: Any, *, attempts: int = 32) -> Any:
-    delay = 0.001
+def stable_snapshot(
+    label: str,
+    callback: Any,
+    *,
+    attempts: int = 32,
+    initial_delay: float = 0.001,
+    max_delay: float = 0.02,
+) -> Any:
+    delay = initial_delay
     last_error: BaseException | None = None
     for _attempt in range(attempts):
         try:
@@ -1352,15 +1359,20 @@ def stable_snapshot(label: str, callback: Any, *, attempts: int = 32) -> Any:
             if first == second:
                 return first
             last_error = RuntimeError(f"{label} changed during snapshot")
-        time.sleep(delay)
-        delay = min(delay * 2, 0.02)
+        if delay > 0:
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)
     raise RuntimeError(f"{label} did not stabilize after {attempts} attempts: {last_error}")
 
 
 def state_bundle_signature(manager: Any, root: Path, target: Path) -> Any:
     return {
         "root_topology": stable_snapshot(
-            f"root topology {root}", lambda: path_signature(manager, root)
+            f"root topology {root}",
+            lambda: path_signature(manager, root),
+            attempts=512,
+            initial_delay=0.0,
+            max_delay=0.0,
         ),
         "target": stable_snapshot(
             f"target identity {target}", lambda: identity_mtime_signature(manager, target)
@@ -1368,6 +1380,9 @@ def state_bundle_signature(manager: Any, root: Path, target: Path) -> Any:
         "target_parent": stable_snapshot(
             f"target parent identity {target.parent}",
             lambda: identity_mtime_signature(manager, target.parent),
+            attempts=512,
+            initial_delay=0.0,
+            max_delay=0.0,
         ),
         "backup": stable_snapshot(
             f"backup identity {manager.backup_root(target)}",
@@ -1376,6 +1391,9 @@ def state_bundle_signature(manager: Any, root: Path, target: Path) -> Any:
         "lock_root": stable_snapshot(
             f"lock root identity {manager.system_lock_root()}",
             lambda: identity_mtime_signature(manager, manager.system_lock_root()),
+            attempts=512,
+            initial_delay=0.0,
+            max_delay=0.0,
         ),
     }
 
@@ -1826,6 +1844,9 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
         manager.install_or_switch(target, manager.render_profile("safe"), operation="install")
         before_identity = identity_mtime_signature(manager, target)
         before_backup = path_signature(manager, manager.backup_root(target))
+        lock_root = make_private_dir(Path(raw) / "locks")
+        original_lock_root = manager.system_lock_root
+        manager.system_lock_root = lambda: lock_root
         original_detect = manager.detect_supported_host
         manager.detect_supported_host = fake_host
         try:
@@ -1946,6 +1967,7 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
                 manager.resolve_target = original_resolve
         if manager.load_stamp(target).get("profile_id") != "safe":
             errors.append("CLI update with selection flags changed installed profile")
+        manager.system_lock_root = original_lock_root
 
 
 def write_manual_backup(

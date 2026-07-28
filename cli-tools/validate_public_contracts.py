@@ -2708,7 +2708,9 @@ def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
         token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
         external_lock = manager.system_lock_root() / f"{token}.lock"
         coordination_lock = manager.coordination_lock_path()
-        lock_root_existed = manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        lock_root_existed = (
+            manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        )
         coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
         external_existed = external_lock.exists() or external_lock.is_symlink()
         if external_lock.exists() or external_lock.is_symlink():
@@ -2769,7 +2771,9 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
         def traced_resolve_locked(path: Path) -> Path:
             events.append("locked-resolve")
             if "lock:.coordination.lock" not in events:
-                errors.append("lifecycle order: locked target resolution preceded coordination lock")
+                errors.append(
+                    "lifecycle order: locked target resolution preceded coordination lock"
+                )
             return original_resolve_locked(path)
 
         def traced_status(path: Path) -> dict[str, Any]:
@@ -2784,7 +2788,9 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
                 errors.append("lifecycle order: status read preceded canonical external lock")
             return original_status(path)
 
-        lock_root_existed = manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        lock_root_existed = (
+            manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        )
         coordination_lock = manager.coordination_lock_path()
         coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
         token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
@@ -2796,8 +2802,9 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
         manager.lock_file = traced_lock_file
         manager.current_status = traced_status
         try:
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                io.StringIO()
+            with (
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
             ):
                 rc = manager.main(["status", "--target", str(target), "--json"])
         finally:

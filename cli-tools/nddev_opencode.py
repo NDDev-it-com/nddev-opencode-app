@@ -3256,7 +3256,9 @@ def rollback_remove_cli_transaction(
     if transaction.stage_root.exists() or transaction.stage_root.is_symlink():
         remove_private_tree(transaction.stage_root, "remove-cli stage")
         maybe_inject_fault(fault_injection, "rollback-remove-cli:remove-stage")
-    restore_software_directory_metadata(target, transaction.snapshot, fault_injection=fault_injection)
+    restore_software_directory_metadata(
+        target, transaction.snapshot, fault_injection=fault_injection
+    )
     assert_software_snapshot(target, transaction.snapshot)
     maybe_inject_fault(fault_injection, "rollback-remove-cli:postcondition")
 

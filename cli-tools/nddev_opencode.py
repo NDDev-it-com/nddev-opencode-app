@@ -1852,7 +1852,9 @@ def plan_payload(target: Path, profile: Profile) -> dict[str, Any]:
     }
 
 
-def lifecycle_noop_payload(target: Path, profile: Profile, *, operation: str) -> dict[str, Any] | None:
+def lifecycle_noop_payload(
+    target: Path, profile: Profile, *, operation: str
+) -> dict[str, Any] | None:
     desired = desired_state_with_stamp(target, profile)
     changes = state_delta(target, desired)
     if changes:
@@ -3290,7 +3292,11 @@ def install_cli(
             fail(f"installed OpenCode software is not current: {status['drift']}")
     except BaseException:
         cleanup_private_tree_required(stage_parent, "OpenCode stage")
-        if not snapshot.target_existed and not original_entrypoint_moved and not original_stamp_moved:
+        if (
+            not snapshot.target_existed
+            and not original_entrypoint_moved
+            and not original_stamp_moved
+        ):
             cleanup_private_tree_required(undo_parent, "OpenCode software undo")
         rollback_software_state(
             target,

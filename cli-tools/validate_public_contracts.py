@@ -387,10 +387,13 @@ def check_release(
                 errors.append("references/opencode-baseline.json: Ubuntu/glibc floor must be null")
             if host_scope.get("ubuntu_glibc_version_floor_note") != "no-official-floor":
                 errors.append("references/opencode-baseline.json: Ubuntu/glibc floor note mismatch")
-            if (
-                host_scope.get("observed_upstream_cli_asset_families")
-                != ["darwin", "linux-glibc", "linux-musl", "windows", "x64-baseline"]
-            ):
+            if host_scope.get("observed_upstream_cli_asset_families") != [
+                "darwin",
+                "linux-glibc",
+                "linux-musl",
+                "windows",
+                "x64-baseline",
+            ]:
                 errors.append("references/opencode-baseline.json: observed asset families mismatch")
             if (
                 host_scope.get("product_unsupported_cli_assets_ref")
@@ -480,7 +483,9 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         if launch.get("host_check_before_runtime") is not True:
             errors.append("build/manifest.json: runtime host check before handoff required")
         if launch.get("host_check_before_target_inspection") is not True:
-            errors.append("build/manifest.json: runtime host check before target inspection required")
+            errors.append(
+                "build/manifest.json: runtime host check before target inspection required"
+            )
         if launch.get("runtime_dirs_real_private") is not True:
             errors.append("build/manifest.json: runtime dirs must be real private dirs")
         lock_policy = launch.get("lock_file_policy") or {}
@@ -678,7 +683,9 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
     ):
         errors.append("config/nddev-contract.json: runtime artifact host map ref mismatch")
     if launch.get("host_check_before_target_inspection") is not True:
-        errors.append("config/nddev-contract.json: runtime host check before target inspection required")
+        errors.append(
+            "config/nddev-contract.json: runtime host check before target inspection required"
+        )
     checks = launch.get("pre_handoff_checks")
     if not isinstance(checks, list) or "supported product host" not in checks:
         errors.append("config/nddev-contract.json: runtime pre-handoff host check required")

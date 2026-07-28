@@ -476,8 +476,16 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("build/manifest.json: host precheck target command list mismatch")
     if command_policy.get("setup_update_uses_installed_identity") is not True:
         errors.append("build/manifest.json: setup update must use installed identity")
-    if command_policy.get("read_only_commands_create_locks") is not True:
-        errors.append("build/manifest.json: read-only commands must acquire lifecycle locks")
+    if command_policy.get("read_only_commands_create_product_anchor") is not False:
+        errors.append("build/manifest.json: read-only commands must not create product anchor")
+    if command_policy.get("read_only_commands_create_target_anchor") is not False:
+        errors.append("build/manifest.json: read-only commands must not create target anchor")
+    if command_policy.get("monotonic_product_anchor") is not True:
+        errors.append("build/manifest.json: monotonic product anchor contract missing")
+    if command_policy.get("monotonic_canonical_target_anchor") is not True:
+        errors.append("build/manifest.json: monotonic target anchor contract missing")
+    if command_policy.get("anchor_publication") != "atomic-durable-no-replace":
+        errors.append("build/manifest.json: anchor publication contract mismatch")
     if command_policy.get("noop_plan_empty_changes") is not True:
         errors.append("build/manifest.json: no-op plan contract missing")
     if command_policy.get("noop_mutation_writes_backup") is not False:
@@ -531,6 +539,11 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
             "identity_revalidated": True,
             "mode": "0600",
             "nlink": 1,
+            "anchor_binding": "json-marker",
+            "anchor_publication_no_replace": True,
+            "anchor_monotonic_after_final_path_publication": True,
+            "anchor_hardlink_alias_recovery": True,
+            "unknown_hardlink_aliases_fail_closed": True,
         }.items():
             if lock_policy.get(key) != expected:
                 errors.append(f"build/manifest.json: lock_file_policy.{key} mismatch")
@@ -660,8 +673,16 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: host precheck target command list mismatch")
     if setup.get("update_uses_installed_identity") is not True:
         errors.append("config/nddev-contract.json: setup update must use installed identity")
-    if setup.get("read_only_commands_create_locks") is not True:
-        errors.append("config/nddev-contract.json: read-only commands must acquire lifecycle locks")
+    if setup.get("read_only_commands_create_product_anchor") is not False:
+        errors.append("config/nddev-contract.json: read-only commands must not create product anchor")
+    if setup.get("read_only_commands_create_target_anchor") is not False:
+        errors.append("config/nddev-contract.json: read-only commands must not create target anchor")
+    if setup.get("monotonic_product_anchor") is not True:
+        errors.append("config/nddev-contract.json: monotonic product anchor contract missing")
+    if setup.get("monotonic_canonical_target_anchor") is not True:
+        errors.append("config/nddev-contract.json: monotonic target anchor contract missing")
+    if setup.get("anchor_publication") != "atomic-durable-no-replace":
+        errors.append("config/nddev-contract.json: anchor publication contract mismatch")
     if setup.get("noop_plan_empty_changes") is not True:
         errors.append("config/nddev-contract.json: no-op plan contract missing")
     if setup.get("noop_mutation_writes_backup") is not False:
@@ -701,6 +722,11 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "identity_revalidated": True,
         "mode": "0600",
         "nlink": 1,
+        "anchor_binding": "json-marker",
+        "anchor_publication_no_replace": True,
+        "anchor_monotonic_after_final_path_publication": True,
+        "anchor_hardlink_alias_recovery": True,
+        "unknown_hardlink_aliases_fail_closed": True,
     }.items():
         if locks.get(key) != expected:
             errors.append(f"config/nddev-contract.json: locks.{key} mismatch")
@@ -2448,10 +2474,7 @@ def check_lock_failure_cleanup_smokes(manager: Any, errors: list[str]) -> None:
             target = root / "target"
             if not create_target:
                 make_private_dir(target)
-            before = (
-                state_bundle_signature(manager, root, target),
-                lock_signature(manager, target),
-            )
+            before_target = identity_mtime_signature(manager, target)
             expect_manager_error(
                 manager,
                 errors,
@@ -2461,9 +2484,68 @@ def check_lock_failure_cleanup_smokes(manager: Any, errors: list[str]) -> None:
                 ),
                 contains="validator lock failure",
             )
-            after = (state_bundle_signature(manager, root, target), lock_signature(manager, target))
-            if after != before:
-                errors.append(f"target lock cleanup create={create_target}: state/lock changed")
+            after_target = identity_mtime_signature(manager, target)
+            if after_target != before_target:
+                errors.append(f"target lock cleanup create={create_target}: target changed")
+            token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+            for path, anchor, digest in (
+                (manager.coordination_lock_path(), "product", None),
+                (manager.system_lock_root() / f"{token}.lock", "target", token),
+            ):
+                handle = manager.acquire_anchor(
+                    path,
+                    anchor=anchor,
+                    target_digest=digest,
+                    shared=True,
+                    create=False,
+                )
+                if handle is None:
+                    errors.append(f"target lock cleanup create={create_target}: anchor missing")
+                    continue
+                release_errors = manager.release_lock_handle(handle)
+                if release_errors:
+                    errors.append(
+                        f"target lock cleanup create={create_target}: anchor release failed"
+                    )
+    with tempfile.TemporaryDirectory(prefix="nddev-opencode-lock-open-fault-") as raw:
+        root = Path(raw)
+        target = root / "target"
+        before_target = identity_mtime_signature(manager, target)
+        original_set_inheritable = manager.os.set_inheritable
+        calls = {"count": 0}
+
+        def fail_second_set_inheritable(fd: int, inheritable: bool) -> None:
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise OSError("validator set_inheritable fault after O_CREAT")
+            original_set_inheritable(fd, inheritable)
+
+        manager.os.set_inheritable = fail_second_set_inheritable
+        try:
+            expect_manager_error(
+                manager,
+                errors,
+                "post-O_CREAT lock initialization cleanup",
+                lambda: _raise_inside_lock(manager, target, create_target=False),
+                contains="cannot publish anchor safely",
+            )
+        finally:
+            manager.os.set_inheritable = original_set_inheritable
+        if calls["count"] < 2:
+            errors.append("post-O_CREAT lock initialization cleanup did not inject")
+        if identity_mtime_signature(manager, target) != before_target:
+            errors.append("post-O_CREAT lock initialization cleanup changed target")
+        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+        leftover_target_anchor = manager.acquire_anchor(
+            manager.system_lock_root() / f"{token}.lock",
+            anchor="target",
+            target_digest=token,
+            shared=True,
+            create=False,
+        )
+        if leftover_target_anchor is not None:
+            manager.release_lock_handle(leftover_target_anchor)
+            errors.append("post-O_CREAT lock initialization cleanup left target anchor")
 
 
 def _raise_inside_lock(manager: Any, target: Path, create_target: bool) -> None:
@@ -2928,41 +3010,153 @@ def cleanup_validator_empty_lock_root(manager: Any, existed_before: bool) -> Non
     manager.fsync_directory(root.parent)
 
 
+def create_crashed_anchor_alias(
+    manager: Any,
+    path: Path,
+    *,
+    anchor: str,
+    target_digest: str | None = None,
+) -> Path:
+    make_private_dir(path.parent)
+    marker = manager.anchor_marker(anchor=anchor, target_digest=target_digest)
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    temporary = Path(temporary_name)
+    try:
+        os.set_inheritable(fd, False)
+        os.fchmod(fd, 0o600)
+        written = 0
+        while written < len(marker):
+            written += os.write(fd, marker[written:])
+        manager.fsync_file_descriptor(fd)
+        os.link(temporary, path)
+        manager.fsync_directory(path.parent)
+    finally:
+        os.close(fd)
+    return temporary
+
+
+def check_anchor_publication_recovery_smoke(manager: Any, errors: list[str]) -> None:
+    with tempfile.TemporaryDirectory(prefix="nddev-opencode-anchor-recovery-") as raw:
+        root = Path(raw)
+        lock_root = make_private_dir(root / "locks")
+        original_lock_root = manager.system_lock_root
+        manager.system_lock_root = lambda: lock_root
+        try:
+            product = manager.coordination_lock_path()
+            product_alias = create_crashed_anchor_alias(
+                manager,
+                product,
+                anchor="product",
+            )
+            if product.lstat().st_nlink != 2:
+                errors.append("anchor recovery smoke did not create product hardlink alias")
+                return
+            handle = manager.acquire_anchor(product, anchor="product", shared=True, create=False)
+            if handle is None:
+                errors.append("anchor recovery smoke could not open product anchor")
+                return
+            release_errors = manager.release_lock_handle(handle)
+            if release_errors:
+                errors.append(f"anchor recovery smoke product release failed: {release_errors[0]}")
+            if product_alias.exists() or product_alias.is_symlink():
+                errors.append("anchor recovery smoke left product temporary alias")
+            if product.lstat().st_nlink != 1:
+                errors.append("anchor recovery smoke did not restore product nlink")
+
+            target = root / "target"
+            token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+            final = manager.system_lock_root() / f"{token}.lock"
+            first = manager.publish_anchor(final, anchor="target", target_digest=token)
+            first_identity = first.file_identity
+            release_errors = manager.release_lock_handle(first)
+            if release_errors:
+                errors.append(f"anchor recovery smoke first target release failed: {release_errors[0]}")
+            before = identity_mtime_signature(manager, final)
+            second = manager.publish_anchor(final, anchor="target", target_digest=token)
+            if second.file_identity != first_identity:
+                errors.append("anchor recovery smoke EEXIST opened a different target anchor")
+            release_errors = manager.release_lock_handle(second)
+            if release_errors:
+                errors.append(f"anchor recovery smoke second target release failed: {release_errors[0]}")
+            after = identity_mtime_signature(manager, final)
+            if after != before:
+                errors.append("anchor recovery smoke EEXIST changed existing target anchor")
+            temp_aliases = [child for child in final.parent.iterdir() if child.name.startswith(f".{final.name}.")]
+            if temp_aliases:
+                errors.append(f"anchor recovery smoke left EEXIST temporary aliases: {temp_aliases}")
+        finally:
+            manager.system_lock_root = original_lock_root
+
+
 def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-readonly-lock-") as raw:
+        root = Path(raw)
         target = Path(raw) / "target"
         token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
         external_lock = manager.system_lock_root() / f"{token}.lock"
         coordination_lock = manager.coordination_lock_path()
-        lock_root_existed = (
-            manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
-        )
-        coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
-        external_existed = external_lock.exists() or external_lock.is_symlink()
         if external_lock.exists() or external_lock.is_symlink():
             errors.append(
                 "read-only lock smoke: unique external lock unexpectedly exists before run"
             )
             return
-        try:
+        commands = (
+            ["status", "--target", str(target), "--json"],
+            ["plan", "--target", str(target), "--json"],
+            ["software-status", "--target", str(target), "--json"],
+        )
+        for command in commands:
+            before = (
+                state_bundle_signature(manager, root, target),
+                lock_signature(manager, target),
+            )
             stdout = io.StringIO()
             stderr = io.StringIO()
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                rc = manager.main(["status", "--target", str(target), "--json"])
+                rc = manager.main(command)
             if rc != 0:
-                errors.append(f"read-only lock smoke failed: {stderr.getvalue()}")
+                errors.append(f"read-only lock smoke failed for {command[0]}: {stderr.getvalue()}")
                 return
             if target.exists() or target.is_symlink():
-                errors.append("read-only lock smoke: status created target")
-            if not (external_lock.exists() or external_lock.is_symlink()):
-                errors.append("read-only lock smoke: status did not create external lock")
-        finally:
-            try:
-                cleanup_validator_lock_file(manager, external_lock, external_existed)
-                cleanup_validator_lock_file(manager, coordination_lock, coordination_existed)
-                cleanup_validator_empty_lock_root(manager, lock_root_existed)
-            except BaseException as exc:  # noqa: BLE001 - cleanup failure is a validator failure.
-                errors.append(f"read-only lock smoke cleanup failed: {exc}")
+                errors.append(f"read-only lock smoke: {command[0]} created target")
+            after = (
+                state_bundle_signature(manager, root, target),
+                lock_signature(manager, target),
+            )
+            if after != before:
+                errors.append(f"read-only lock smoke: {command[0]} left lock/target residue")
+        seeded_handles = [
+            manager.acquire_anchor(coordination_lock, anchor="product", create=True),
+            manager.acquire_anchor(
+                external_lock,
+                anchor="target",
+                target_digest=token,
+                create=True,
+            ),
+        ]
+        for handle in seeded_handles:
+            if handle is not None:
+                release_errors = manager.release_lock_handle(handle)
+                if release_errors:
+                    errors.append(f"read-only seeded lock setup release failed: {release_errors[0]}")
+                    return
+        before_existing = (
+            state_bundle_signature(manager, root, target),
+            lock_signature(manager, target),
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            rc = manager.main(["status", "--target", str(target), "--json"])
+        if rc != 0:
+            errors.append(f"read-only pre-existing lock smoke failed: {stderr.getvalue()}")
+            return
+        after_existing = (
+            state_bundle_signature(manager, root, target),
+            lock_signature(manager, target),
+        )
+        if after_existing != before_existing:
+            errors.append("read-only lock smoke changed pre-existing lock markers")
 
 
 def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
@@ -2972,7 +3166,7 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
         original_detect = manager.detect_supported_host
         original_resolve = manager.resolve_target
         original_resolve_locked = manager.resolve_target_locked
-        original_lock_file = manager.lock_file
+        original_acquire_anchor = manager.acquire_anchor
         original_status = manager.current_status
 
         def traced_detect() -> dict[str, Any]:
@@ -2985,42 +3179,46 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
                 errors.append(f"lifecycle order: lexical target ran out of order: {events}")
             return original_resolve(raw_target)
 
-        def traced_lock_file(path: Path) -> Any:
-            events.append(f"lock:{path.name}")
-            return original_lock_file(path)
+        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+        seeded_handles = [
+            original_acquire_anchor(manager.coordination_lock_path(), anchor="product", create=True),
+            original_acquire_anchor(
+                manager.system_lock_root() / f"{token}.lock",
+                anchor="target",
+                target_digest=token,
+                create=True,
+            ),
+        ]
+        for handle in seeded_handles:
+            if handle is not None:
+                release_errors = manager.release_lock_handle(handle)
+                if release_errors:
+                    errors.append(f"lifecycle order seeded anchor release failed: {release_errors[0]}")
+                    return
+
+        def traced_acquire_anchor(path: Path, **kwargs: Any) -> Any:
+            events.append(f"anchor:{kwargs.get('anchor')}:{path.name}")
+            return original_acquire_anchor(path, **kwargs)
 
         def traced_resolve_locked(path: Path) -> Path:
             events.append("locked-resolve")
-            if "lock:.coordination.lock" not in events:
+            if not any(event.startswith("anchor:product:") for event in events):
                 errors.append(
-                    "lifecycle order: locked target resolution preceded coordination lock"
+                    "lifecycle order: locked target resolution preceded product anchor"
                 )
             return original_resolve_locked(path)
 
         def traced_status(path: Path) -> dict[str, Any]:
             events.append("status-read")
-            external_seen = any(
-                event.startswith("lock:")
-                and event != "lock:.coordination.lock"
-                and event.endswith(".lock")
-                for event in events
-            )
+            external_seen = any(event.startswith("anchor:target:") for event in events)
             if not external_seen:
-                errors.append("lifecycle order: status read preceded canonical external lock")
+                errors.append("lifecycle order: status read preceded canonical target anchor")
             return original_status(path)
 
-        lock_root_existed = (
-            manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
-        )
-        coordination_lock = manager.coordination_lock_path()
-        coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
-        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
-        external_lock = manager.system_lock_root() / f"{token}.lock"
-        external_existed = external_lock.exists() or external_lock.is_symlink()
         manager.detect_supported_host = traced_detect
         manager.resolve_target = traced_resolve
         manager.resolve_target_locked = traced_resolve_locked
-        manager.lock_file = traced_lock_file
+        manager.acquire_anchor = traced_acquire_anchor
         manager.current_status = traced_status
         try:
             with (
@@ -3032,19 +3230,19 @@ def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
             manager.detect_supported_host = original_detect
             manager.resolve_target = original_resolve
             manager.resolve_target_locked = original_resolve_locked
-            manager.lock_file = original_lock_file
+            manager.acquire_anchor = original_acquire_anchor
             manager.current_status = original_status
-            try:
-                cleanup_validator_lock_file(manager, external_lock, external_existed)
-                cleanup_validator_lock_file(manager, coordination_lock, coordination_existed)
-                cleanup_validator_empty_lock_root(manager, lock_root_existed)
-            except BaseException as exc:  # noqa: BLE001 - cleanup failure is a validator failure.
-                errors.append(f"lifecycle order smoke cleanup failed: {exc}")
         if rc != 0:
             errors.append("lifecycle order smoke failed")
             return
-        expected_prefix = ["host", "lexical-target", "lock:.coordination.lock", "locked-resolve"]
-        if events[:4] != expected_prefix:
+        expected_prefix = [
+            "host",
+            "lexical-target",
+            "anchor:product:global.lock",
+            "locked-resolve",
+            f"anchor:target:{token}.lock",
+        ]
+        if events[:5] != expected_prefix:
             errors.append(f"lifecycle order prefix mismatch: {events}")
         if not events or events[-1] != "status-read":
             errors.append(f"lifecycle order status read missing or out of order: {events}")
@@ -3057,7 +3255,8 @@ def check_cli_failure_lock_cleanup_smoke(manager: Any, errors: list[str]) -> Non
         manager.atomic_write(
             target / "opencode.json", manager.canonical_json({"permission": "ask"})
         )
-        before = (state_bundle_signature(manager, root, target), lock_signature(manager, target))
+        before_target = identity_mtime_signature(manager, target)
+        before_backup = identity_mtime_signature(manager, manager.backup_root(target))
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
@@ -3073,9 +3272,31 @@ def check_cli_failure_lock_cleanup_smoke(manager: Any, errors: list[str]) -> Non
                 errors.append("CLI failure lock cleanup smoke JSON payload mismatch")
         if stdout.getvalue():
             errors.append("CLI failure lock cleanup smoke wrote stdout")
-        after = (state_bundle_signature(manager, root, target), lock_signature(manager, target))
-        if after != before:
-            errors.append("CLI failure lock cleanup smoke left target/backup/lock residue")
+        if identity_mtime_signature(manager, target) != before_target:
+            errors.append("CLI failure lock cleanup smoke changed target")
+        if identity_mtime_signature(manager, manager.backup_root(target)) != before_backup:
+            errors.append("CLI failure lock cleanup smoke changed backup")
+        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+        for path, anchor, digest in (
+            (manager.coordination_lock_path(), "product", None),
+            (manager.system_lock_root() / f"{token}.lock", "target", token),
+        ):
+            handle = manager.acquire_anchor(
+                path,
+                anchor=anchor,
+                target_digest=digest,
+                shared=True,
+                create=False,
+            )
+            if handle is None:
+                errors.append("CLI failure lock cleanup smoke missing monotonic anchor")
+                continue
+            release_errors = manager.release_lock_handle(handle)
+            if release_errors:
+                errors.append(f"CLI failure lock cleanup smoke anchor release failed: {release_errors[0]}")
+        lock_root = manager.system_lock_root()
+        if lock_root.exists() and any(child.name.startswith(".") for child in lock_root.iterdir()):
+            errors.append("CLI failure lock cleanup smoke left temporary lock residue")
 
 
 def check_adversarial_smokes(errors: list[str]) -> None:
@@ -3103,6 +3324,7 @@ def check_adversarial_smokes(errors: list[str]) -> None:
             check_software_transaction_smokes(manager, errors)
             check_remove_cli_transaction_smokes(manager, errors)
             check_json_parse_smokes(errors)
+            check_anchor_publication_recovery_smoke(manager, errors)
             check_read_only_lock_smoke(manager, errors)
             check_cli_failure_lock_cleanup_smoke(manager, errors)
         finally:

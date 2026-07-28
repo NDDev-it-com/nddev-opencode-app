@@ -381,6 +381,7 @@ class DirectorySnapshotEntry:
     identity: tuple[int, int]
     atime_ns: int
     mtime_ns: int
+    size: int
 
 
 @dataclass(frozen=True)
@@ -457,6 +458,7 @@ class LockHandle:
     file_existed: bool
     parent_snapshot: DirectorySnapshotEntry | None
     container_snapshot: DirectorySnapshotEntry | None
+    file_identity: tuple[int, int] | None
 
 
 def fail(message: str) -> NoReturn:
@@ -583,6 +585,7 @@ def snapshot_private_directory_metadata(path: Path, label: str) -> DirectorySnap
         identity=identity_of(info),
         atime_ns=info.st_atime_ns,
         mtime_ns=info.st_mtime_ns,
+        size=info.st_size,
     )
 
 
@@ -605,6 +608,8 @@ def assert_private_directory_metadata(
         fail(f"{label} rollback postcondition identity mismatch")
     if stat.S_IMODE(info.st_mode) != snapshot.mode:
         fail(f"{label} rollback postcondition mode mismatch")
+    if info.st_size != snapshot.size:
+        fail(f"{label} rollback postcondition size mismatch")
     if info.st_mtime_ns != snapshot.mtime_ns:
         fail(f"{label} rollback postcondition mtime mismatch")
 
@@ -1108,6 +1113,7 @@ def snapshot_managed_directories(target: Path) -> dict[str, DirectorySnapshotEnt
             identity=identity_of(info),
             atime_ns=info.st_atime_ns,
             mtime_ns=info.st_mtime_ns,
+            size=info.st_size,
         )
     return result
 
@@ -2435,6 +2441,7 @@ def snapshot_software_directories(target: Path) -> dict[str, DirectorySnapshotEn
             identity=identity_of(info),
             atime_ns=info.st_atime_ns,
             mtime_ns=info.st_mtime_ns,
+            size=info.st_size,
         )
     return result
 
@@ -3777,12 +3784,395 @@ def system_lock_root() -> Path:
 
 
 def coordination_lock_path() -> Path:
-    return system_lock_root() / ".coordination.lock"
+    return global_lock_path()
+
+
+def global_lock_path() -> Path:
+    return system_lock_root() / "global.lock"
+
+
+def external_lock_path_for_digest(digest: str) -> Path:
+    return system_lock_root() / f"{digest}.lock"
+
+
+def lock_open_flags() -> int:
+    flags = os.O_RDWR
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    return flags
+
+
+def cleanup_unreturned_created_lock(
+    path: Path,
+    *,
+    created_identity: tuple[int, int] | None,
+    parent_existed: bool,
+    parent_snapshot: DirectorySnapshotEntry | None,
+    container_snapshot: DirectorySnapshotEntry | None,
+) -> None:
+    handle = LockHandle(
+        fd=-1,
+        path=path,
+        parent_existed=parent_existed,
+        file_existed=False,
+        parent_snapshot=parent_snapshot,
+        container_snapshot=container_snapshot,
+        file_identity=created_identity,
+    )
+    cleanup_created_lock(handle)
+
+
+def open_lock_file(
+    path: Path,
+    *,
+    create: bool,
+    lock_operation: int | None,
+) -> LockHandle | None:
+    parent_existed = path.parent.exists() or path.parent.is_symlink()
+    file_existed = path.exists() or path.is_symlink()
+    if not create and not parent_existed:
+        return None
+    parent_snapshot = (
+        snapshot_private_directory_metadata(path.parent, f"lock parent {path.parent}")
+        if parent_existed
+        else None
+    )
+    container_snapshot = None
+    if not parent_existed and (path.parent.parent.exists() or path.parent.parent.is_symlink()):
+        try:
+            container_snapshot = snapshot_private_directory_metadata(
+                path.parent.parent,
+                f"lock parent container {path.parent.parent}",
+            )
+        except ManagerError:
+            container_snapshot = None
+    ensure_real_private_directory(path.parent, f"lock parent {path.parent}", create=create)
+    parent_before = require_real_private_directory(path.parent, f"lock parent {path.parent}")
+    flags = lock_open_flags()
+    fd: int | None = None
+    created_file = False
+    file_identity: tuple[int, int] | None = None
+    try:
+        try:
+            if create:
+                fd = os.open(path, flags | os.O_CREAT | os.O_EXCL, OWNER_FILE_MODE)
+                created_file = True
+                file_identity = identity_of(os.fstat(fd))
+                os.fchmod(fd, OWNER_FILE_MODE)
+            else:
+                fd = os.open(path, flags)
+        except FileExistsError:
+            try:
+                fd = os.open(path, flags)
+            except OSError as exc:
+                fail(f"cannot open lock file safely: {path}: {exc}")
+        except FileNotFoundError:
+            if not create:
+                return None
+            raise
+        except OSError as exc:
+            fail(f"cannot open lock file safely: {path}: {exc}")
+        os.set_inheritable(fd, False)
+        opened = os.fstat(fd)
+        if file_identity is None:
+            file_identity = identity_of(opened)
+        on_disk = path.lstat()
+        parent_after = require_real_private_directory(path.parent, f"lock parent {path.parent}")
+        if identity_of(parent_before) != identity_of(parent_after):
+            raise ConcurrentTargetChange(f"lock parent changed while opening: {path.parent}")
+        if identity_of(opened) != identity_of(on_disk):
+            raise ConcurrentTargetChange(f"lock file identity changed while opening: {path}")
+        if stat.S_ISLNK(opened.st_mode) or not stat.S_ISREG(opened.st_mode):
+            fail(f"lock file must be a regular non-symlink file: {path}")
+        require_current_user_owner(opened, f"lock file {path}")
+        if stat.S_IMODE(opened.st_mode) != OWNER_FILE_MODE:
+            fail(f"lock file must have mode 0600: {path}")
+        if opened.st_nlink != 1:
+            fail(f"lock file must not have hard-link aliases: {path}")
+        if lock_operation is not None:
+            fcntl.flock(fd, lock_operation | fcntl.LOCK_NB)
+    except BlockingIOError:
+        if fd is not None:
+            os.close(fd)
+            fd = None
+        if created_file:
+            try:
+                cleanup_unreturned_created_lock(
+                    path,
+                    created_identity=file_identity,
+                    parent_existed=parent_existed,
+                    parent_snapshot=parent_snapshot,
+                    container_snapshot=container_snapshot,
+                )
+            except BaseException as cleanup_exc:
+                fail(f"cannot clean failed lock creation safely: {path}: {cleanup_exc}")
+        fail(f"target is already locked: {path}")
+    except BaseException as exc:
+        if fd is not None:
+            os.close(fd)
+            fd = None
+        if created_file:
+            try:
+                cleanup_unreturned_created_lock(
+                    path,
+                    created_identity=file_identity,
+                    parent_existed=parent_existed,
+                    parent_snapshot=parent_snapshot,
+                    container_snapshot=container_snapshot,
+                )
+            except BaseException as cleanup_exc:
+                fail(f"cannot clean failed lock creation safely: {path}: {cleanup_exc}")
+        if isinstance(exc, ManagerError):
+            raise
+        fail(f"cannot open lock file safely: {path}: {exc}")
+    assert fd is not None
+    return LockHandle(
+        fd=fd,
+        path=path,
+        parent_existed=parent_existed,
+        file_existed=file_existed,
+        parent_snapshot=parent_snapshot,
+        container_snapshot=container_snapshot,
+        file_identity=file_identity,
+    )
 
 
 def lock_file(path: Path) -> LockHandle:
+    handle = open_lock_file(path, create=True, lock_operation=fcntl.LOCK_EX)
+    assert handle is not None
+    return handle
+
+
+def lock_existing_file(path: Path, *, shared: bool) -> LockHandle | None:
+    return open_lock_file(
+        path,
+        create=False,
+        lock_operation=fcntl.LOCK_SH if shared else fcntl.LOCK_EX,
+    )
+
+
+def anchor_marker(*, anchor: str, target_digest: str | None = None) -> bytes:
+    payload: dict[str, Any] = {
+        "schema": 1,
+        "product": PRODUCT_NAME,
+        "anchor": anchor,
+    }
+    if target_digest is not None:
+        payload["target_digest"] = target_digest
+    return canonical_json(payload)
+
+
+def expected_anchor_payload(*, anchor: str, target_digest: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema": 1,
+        "product": PRODUCT_NAME,
+        "anchor": anchor,
+    }
+    if target_digest is not None:
+        payload["target_digest"] = target_digest
+    return payload
+
+
+def read_fd_bytes(fd: int, label: str) -> bytes:
+    try:
+        os.lseek(fd, 0, os.SEEK_SET)
+        chunks: list[bytes] = []
+        remaining = METADATA_MAX_BYTES + 1
+        while remaining > 0:
+            chunk = os.read(fd, min(remaining, 8192))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+    except OSError as exc:
+        fail(f"{label} cannot be read safely: {exc}")
+    content = b"".join(chunks)
+    if not content:
+        fail(f"{label} is empty")
+    if len(content) > METADATA_MAX_BYTES:
+        fail(f"{label} exceeds metadata size limit")
+    return content
+
+
+def recover_anchor_temp_aliases(path: Path, identity: tuple[int, int]) -> None:
+    parent = path.parent
+    prefix = f".{path.name}."
+    try:
+        children = list(parent.iterdir())
+    except OSError as exc:
+        fail(f"anchor temporary alias scan failed for {path}: {exc}")
+    matching_aliases: list[Path] = []
+    for child in children:
+        if child == path or not child.name.startswith(prefix):
+            continue
+        try:
+            info = child.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            fail(f"anchor temporary alias is not a regular file: {child}")
+        require_current_user_owner(info, f"anchor temporary alias {child}")
+        if stat.S_IMODE(info.st_mode) != OWNER_FILE_MODE:
+            fail(f"anchor temporary alias must have mode 0600: {child}")
+        if identity_of(info) != identity:
+            fail(f"anchor temporary alias identity mismatch: {child}")
+        matching_aliases.append(child)
+    if len(matching_aliases) != 1:
+        fail(f"anchor file has unexpected hard-link aliases: {path}")
+    try:
+        matching_aliases[0].unlink()
+    except OSError as exc:
+        fail(f"anchor temporary alias cleanup failed for {matching_aliases[0]}: {exc}")
+    fsync_directory(parent)
+
+
+def validate_anchor_handle(
+    fd: int,
+    path: Path,
+    *,
+    anchor: str,
+    target_digest: str | None = None,
+) -> tuple[int, int]:
+    try:
+        opened = os.fstat(fd)
+        on_disk = path.lstat()
+    except OSError as exc:
+        fail(f"anchor binding cannot be validated: {path}: {exc}")
+    if identity_of(opened) != identity_of(on_disk):
+        raise ConcurrentTargetChange(f"anchor file identity changed while opening: {path}")
+    if stat.S_ISLNK(opened.st_mode) or not stat.S_ISREG(opened.st_mode):
+        fail(f"anchor file must be a regular non-symlink file: {path}")
+    require_current_user_owner(opened, f"anchor file {path}")
+    if stat.S_IMODE(opened.st_mode) != OWNER_FILE_MODE:
+        fail(f"anchor file must have mode 0600: {path}")
+    if opened.st_nlink == 2:
+        recover_anchor_temp_aliases(path, identity_of(opened))
+        try:
+            opened = os.fstat(fd)
+            on_disk = path.lstat()
+        except OSError as exc:
+            fail(f"anchor binding cannot be revalidated after recovery: {path}: {exc}")
+        if identity_of(opened) != identity_of(on_disk):
+            raise ConcurrentTargetChange(f"anchor file identity changed during recovery: {path}")
+        if opened.st_nlink != 1:
+            fail(f"anchor file must not have hard-link aliases: {path}")
+    elif opened.st_nlink != 1:
+        fail(f"anchor file must not have hard-link aliases: {path}")
+    try:
+        payload = json.loads(read_fd_bytes(fd, f"anchor file {path}").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        fail(f"anchor file is malformed: {path}: {exc}")
+    expected = expected_anchor_payload(anchor=anchor, target_digest=target_digest)
+    if payload != expected:
+        fail(f"anchor file binding mismatch: {path}")
+    return identity_of(opened)
+
+
+def open_existing_anchor(
+    path: Path,
+    *,
+    anchor: str,
+    target_digest: str | None = None,
+    shared: bool,
+) -> LockHandle | None:
     parent_existed = path.parent.exists() or path.parent.is_symlink()
-    file_existed = path.exists() or path.is_symlink()
+    if not parent_existed:
+        return None
+    parent_snapshot = snapshot_private_directory_metadata(path.parent, f"lock parent {path.parent}")
+    flags = lock_open_flags()
+    try:
+        fd = os.open(path, flags)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        fail(f"cannot open anchor file safely: {path}: {exc}")
+    try:
+        os.set_inheritable(fd, False)
+        fcntl.flock(fd, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX))
+        file_identity = validate_anchor_handle(
+            fd,
+            path,
+            anchor=anchor,
+            target_digest=target_digest,
+        )
+    except BaseException as exc:
+        os.close(fd)
+        if isinstance(exc, ManagerError):
+            raise
+        fail(f"cannot open anchor file safely: {path}: {exc}")
+    return LockHandle(
+        fd=fd,
+        path=path,
+        parent_existed=True,
+        file_existed=True,
+        parent_snapshot=parent_snapshot,
+        container_snapshot=None,
+        file_identity=file_identity,
+    )
+
+
+def cleanup_unpublished_anchor(
+    *,
+    temporary: Path,
+    parent: Path,
+    parent_existed: bool,
+    parent_snapshot: DirectorySnapshotEntry | None,
+    container_snapshot: DirectorySnapshotEntry | None,
+) -> None:
+    cleanup_errors: list[BaseException] = []
+    if temporary.exists() or temporary.is_symlink():
+        try:
+            require_regular_file(temporary, f"unpublished anchor {temporary}", private=True)
+            temporary.unlink()
+            fsync_directory(parent)
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+    if parent_snapshot is not None:
+        try:
+            restore_private_directory_metadata(
+                parent,
+                parent_snapshot,
+                f"lock parent {parent}",
+            )
+            assert_private_directory_metadata(
+                parent,
+                parent_snapshot,
+                f"lock parent {parent}",
+            )
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+    if not parent_existed and (parent.exists() or parent.is_symlink()):
+        try:
+            require_real_private_directory(parent, f"lock parent {parent}")
+            parent.rmdir()
+            fsync_directory(parent.parent)
+            if container_snapshot is not None:
+                restore_private_directory_metadata(
+                    parent.parent,
+                    container_snapshot,
+                    f"lock parent container {parent.parent}",
+                )
+                assert_private_directory_metadata(
+                    parent.parent,
+                    container_snapshot,
+                    f"lock parent container {parent.parent}",
+                )
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+    if cleanup_errors:
+        raise cleanup_errors[0]
+
+
+def publish_anchor(
+    path: Path,
+    *,
+    anchor: str,
+    target_digest: str | None = None,
+    shared: bool = False,
+) -> LockHandle:
+    parent_existed = path.parent.exists() or path.parent.is_symlink()
     parent_snapshot = (
         snapshot_private_directory_metadata(path.parent, f"lock parent {path.parent}")
         if parent_existed
@@ -3798,53 +4188,120 @@ def lock_file(path: Path) -> LockHandle:
         except ManagerError:
             container_snapshot = None
     ensure_real_private_directory(path.parent, f"lock parent {path.parent}", create=True)
-    parent_before = require_real_private_directory(path.parent, f"lock parent {path.parent}")
-    flags = os.O_RDWR
-    if hasattr(os, "O_CLOEXEC"):
-        flags |= os.O_CLOEXEC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        fd = os.open(path, flags | os.O_CREAT | os.O_EXCL, OWNER_FILE_MODE)
-        os.fchmod(fd, OWNER_FILE_MODE)
-    except FileExistsError:
-        try:
-            fd = os.open(path, flags)
-        except OSError as exc:
-            fail(f"cannot open lock file safely: {path}: {exc}")
-    except OSError as exc:
-        fail(f"cannot open lock file safely: {path}: {exc}")
+    marker = anchor_marker(anchor=anchor, target_digest=target_digest)
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    temporary = Path(temporary_name)
+    linked_final = False
+    durable = False
     try:
         os.set_inheritable(fd, False)
-        opened = os.fstat(fd)
-        on_disk = path.lstat()
-        parent_after = require_real_private_directory(path.parent, f"lock parent {path.parent}")
-        if identity_of(parent_before) != identity_of(parent_after):
-            raise ConcurrentTargetChange(f"lock parent changed while opening: {path.parent}")
-        if identity_of(opened) != identity_of(on_disk):
-            raise ConcurrentTargetChange(f"lock file identity changed while opening: {path}")
-        if stat.S_ISLNK(opened.st_mode) or not stat.S_ISREG(opened.st_mode):
-            fail(f"lock file must be a regular non-symlink file: {path}")
-        require_current_user_owner(opened, f"lock file {path}")
-        if stat.S_IMODE(opened.st_mode) != OWNER_FILE_MODE:
-            fail(f"lock file must have mode 0600: {path}")
-        if opened.st_nlink != 1:
-            fail(f"lock file must not have hard-link aliases: {path}")
-    except BaseException:
-        os.close(fd)
-        raise
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        os.close(fd)
-        fail(f"target is already locked: {path}")
-    return LockHandle(
-        fd=fd,
-        path=path,
-        parent_existed=parent_existed,
-        file_existed=file_existed,
-        parent_snapshot=parent_snapshot,
-        container_snapshot=container_snapshot,
+        os.fchmod(fd, OWNER_FILE_MODE)
+        written = 0
+        while written < len(marker):
+            written += os.write(fd, marker[written:])
+        fsync_file_descriptor(fd)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            os.link(temporary, path)
+            linked_final = True
+        except FileExistsError:
+            os.close(fd)
+            fd = -1
+            temporary.unlink()
+            fsync_directory(path.parent)
+            if parent_snapshot is not None:
+                restore_private_directory_metadata(
+                    path.parent,
+                    parent_snapshot,
+                    f"lock parent {path.parent}",
+                )
+                assert_private_directory_metadata(
+                    path.parent,
+                    parent_snapshot,
+                    f"lock parent {path.parent}",
+                )
+            existing = open_existing_anchor(
+                path,
+                anchor=anchor,
+                target_digest=target_digest,
+                shared=shared,
+            )
+            if existing is None:
+                raise ConcurrentTargetChange(f"anchor disappeared after existing publication: {path}")
+            return existing
+        temporary.unlink()
+        fsync_directory(path.parent)
+        durable = True
+        file_identity = validate_anchor_handle(
+            fd,
+            path,
+            anchor=anchor,
+            target_digest=target_digest,
+        )
+        if shared:
+            fcntl.flock(fd, fcntl.LOCK_SH)
+        return LockHandle(
+            fd=fd,
+            path=path,
+            parent_existed=True,
+            file_existed=True,
+            parent_snapshot=snapshot_private_directory_metadata(
+                path.parent,
+                f"lock parent {path.parent}",
+            ),
+            container_snapshot=None,
+            file_identity=file_identity,
+        )
+    except BaseException as exc:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if not durable:
+            try:
+                cleanup_unpublished_anchor(
+                    temporary=temporary,
+                    parent=path.parent,
+                    parent_existed=parent_existed,
+                    parent_snapshot=None if linked_final else parent_snapshot,
+                    container_snapshot=None if linked_final else container_snapshot,
+                )
+            except BaseException as cleanup_exc:
+                fail(f"cannot clean unpublished anchor safely: {path}: {cleanup_exc}")
+        if isinstance(exc, ManagerError):
+            raise
+        fail(f"cannot publish anchor safely: {path}: {exc}")
+
+
+def acquire_anchor(
+    path: Path,
+    *,
+    anchor: str,
+    target_digest: str | None = None,
+    shared: bool = False,
+    create: bool,
+) -> LockHandle | None:
+    if create:
+        existing = open_existing_anchor(
+            path,
+            anchor=anchor,
+            target_digest=target_digest,
+            shared=shared,
+        )
+        if existing is not None:
+            return existing
+        return publish_anchor(
+            path,
+            anchor=anchor,
+            target_digest=target_digest,
+            shared=shared,
+        )
+    return open_existing_anchor(
+        path,
+        anchor=anchor,
+        target_digest=target_digest,
+        shared=shared,
     )
 
 
@@ -3863,13 +4320,21 @@ def release_lock_handle(handle: LockHandle) -> list[BaseException]:
 
 def cleanup_created_lock(handle: LockHandle) -> None:
     cleanup_errors: list[BaseException] = []
-    if not handle.file_existed and (handle.path.exists() or handle.path.is_symlink()):
+    if not handle.file_existed:
         try:
-            require_regular_file(handle.path, f"lock file {handle.path}", private=True)
-            handle.path.unlink()
-            fsync_directory(handle.path.parent)
+            if handle.path.exists() or handle.path.is_symlink():
+                info = require_regular_file(handle.path, f"lock file {handle.path}", private=True)
+                if handle.file_identity is not None and identity_of(info) != handle.file_identity:
+                    raise ConcurrentTargetChange(f"lock file changed before cleanup: {handle.path}")
+                handle.path.unlink()
+                fsync_directory(handle.path.parent)
             if handle.parent_snapshot is not None:
                 restore_private_directory_metadata(
+                    handle.path.parent,
+                    handle.parent_snapshot,
+                    f"lock parent {handle.path.parent}",
+                )
+                assert_private_directory_metadata(
                     handle.path.parent,
                     handle.parent_snapshot,
                     f"lock parent {handle.path.parent}",
@@ -3889,8 +4354,11 @@ def cleanup_created_lock(handle: LockHandle) -> None:
                     handle.container_snapshot,
                     f"lock parent container {handle.path.parent.parent}",
                 )
-        except OSError:
-            pass
+                assert_private_directory_metadata(
+                    handle.path.parent.parent,
+                    handle.container_snapshot,
+                    f"lock parent container {handle.path.parent.parent}",
+                )
         except BaseException as exc:
             cleanup_errors.append(exc)
     if cleanup_errors:
@@ -3939,18 +4407,33 @@ def internal_target_lock(target: Path, *, create_target: bool) -> Iterator[Path]
 
 @contextlib.contextmanager
 def target_locks(
-    target: Path, *, create_target: bool, lock_internal: bool = True
+    target: Path,
+    *,
+    create_target: bool,
+    lock_internal: bool = True,
 ) -> Iterator[Path]:
-    coordination_handle = lock_file(coordination_lock_path())
+    coordination_handle = acquire_anchor(
+        coordination_lock_path(),
+        anchor="product",
+        create=True,
+    )
     external_handle: LockHandle | None = None
-    canonical_target: Path | None = None
-    success = False
     try:
+        assert coordination_handle is not None
         canonical_target = resolve_target_locked(target)
         canonical = str(canonical_target)
         token = sha256_bytes(canonical.encode("utf-8"))
-        external = system_lock_root() / f"{token}.lock"
-        external_handle = lock_file(external)
+        external = external_lock_path_for_digest(token)
+        external_handle = acquire_anchor(
+            external,
+            anchor="target",
+            target_digest=token,
+            create=True,
+        )
+        coordination_release_errors = release_lock_handle(coordination_handle)
+        coordination_handle = None
+        if coordination_release_errors:
+            fail(f"cannot release product lock safely: {coordination_release_errors[0]}")
         if lock_internal:
             with internal_target_lock(canonical_target, create_target=create_target):
                 yield canonical_target
@@ -3958,27 +4441,66 @@ def target_locks(
             if create_target:
                 fail("internal target lock is required before target creation")
             yield canonical_target
-        success = True
     finally:
         release_errors: list[BaseException] = []
         if external_handle is not None:
             release_errors.extend(release_lock_handle(external_handle))
-        release_errors.extend(release_lock_handle(coordination_handle))
-        if not success:
-            cleanup_errors: list[BaseException] = []
-            if external_handle is not None:
-                try:
-                    cleanup_created_lock(external_handle)
-                except BaseException as exc:
-                    cleanup_errors.append(exc)
-            try:
-                cleanup_created_lock(coordination_handle)
-            except BaseException as exc:
-                cleanup_errors.append(exc)
-            if cleanup_errors:
-                raise cleanup_errors[0]
+        if coordination_handle is not None:
+            release_errors.extend(release_lock_handle(coordination_handle))
         if release_errors:
             fail(f"cannot release lock safely: {release_errors[0]}")
+
+
+def product_anchor_present() -> bool:
+    root = system_lock_root()
+    if not root.exists() and not root.is_symlink():
+        return False
+    require_real_private_directory(root, f"lock root {root}")
+    path = coordination_lock_path()
+    return path.exists() or path.is_symlink()
+
+
+@contextlib.contextmanager
+def read_only_target_locks(target: Path) -> Iterator[Path]:
+    coordination_handle: LockHandle | None = None
+    external_handle: LockHandle | None = None
+    cold_no_anchor = False
+    try:
+        coordination_handle = acquire_anchor(
+            coordination_lock_path(),
+            anchor="product",
+            shared=True,
+            create=False,
+        )
+        if coordination_handle is None:
+            cold_no_anchor = True
+            yield resolve_target_locked(target)
+        else:
+            canonical_target = resolve_target_locked(target)
+            token = sha256_bytes(str(canonical_target).encode("utf-8"))
+            external_handle = acquire_anchor(
+                external_lock_path_for_digest(token),
+                anchor="target",
+                target_digest=token,
+                shared=True,
+                create=False,
+            )
+            if external_handle is not None:
+                release_errors = release_lock_handle(coordination_handle)
+                coordination_handle = None
+                if release_errors:
+                    fail(f"cannot release product lock safely: {release_errors[0]}")
+            yield canonical_target
+    finally:
+        release_errors: list[BaseException] = []
+        if external_handle is not None:
+            release_errors.extend(release_lock_handle(external_handle))
+        if coordination_handle is not None:
+            release_errors.extend(release_lock_handle(coordination_handle))
+        if release_errors:
+            fail(f"cannot release read-only lock safely: {release_errors[0]}")
+        if cold_no_anchor and product_anchor_present():
+            raise ConcurrentTargetChange("product anchor appeared during cold read")
 
 
 def validate_launch_args(args: list[str], profile_id: str) -> None:
@@ -4191,14 +4713,23 @@ def main(argv: list[str] | None = None) -> int:
         json_output = bool(getattr(args, "json", False))
 
         if command in {"status", "software-status", "plan"}:
-            with target_locks(target, create_target=False, lock_internal=False) as locked_target:
-                target = locked_target
-                if command == "status":
-                    payload = current_status(target)
-                elif command == "software-status":
-                    payload = software_status_payload(target)
-                else:
-                    payload = plan_payload(target, render_profile(args.profile))
+            payload = None
+            for attempt in range(2):
+                try:
+                    with read_only_target_locks(target) as locked_target:
+                        target = locked_target
+                        if command == "status":
+                            payload = current_status(target)
+                        elif command == "software-status":
+                            payload = software_status_payload(target)
+                        else:
+                            payload = plan_payload(target, render_profile(args.profile))
+                    break
+                except ConcurrentTargetChange:
+                    if attempt == 0:
+                        continue
+                    raise
+            assert payload is not None
         elif command == "update":
             with target_locks(target, create_target=False, lock_internal=False) as locked_target:
                 target = locked_target

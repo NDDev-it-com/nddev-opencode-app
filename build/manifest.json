@@ -95,7 +95,11 @@
       "launch"
     ],
     "plan_mutates": false,
-    "read_only_commands_create_locks": true,
+    "read_only_commands_create_product_anchor": false,
+    "read_only_commands_create_target_anchor": false,
+    "monotonic_product_anchor": true,
+    "monotonic_canonical_target_anchor": true,
+    "anchor_publication": "atomic-durable-no-replace",
     "restore_backup_option": "--backup <0..9>",
     "status_executes_binary": false,
     "noop_plan_empty_changes": true,
@@ -118,7 +122,12 @@
       "open_no_follow": true,
       "identity_revalidated": true,
       "mode": "0600",
-      "nlink": 1
+      "nlink": 1,
+      "anchor_binding": "json-marker",
+      "anchor_publication_no_replace": true,
+      "anchor_monotonic_after_final_path_publication": true,
+      "anchor_hardlink_alias_recovery": true,
+      "unknown_hardlink_aliases_fail_closed": true
     },
     "forced_environment": {
       "OPENCODE_CONFIG": "<target>/opencode.json",

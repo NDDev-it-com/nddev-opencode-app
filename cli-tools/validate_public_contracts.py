@@ -2929,7 +2929,6 @@ def cleanup_validator_empty_lock_root(manager: Any, existed_before: bool) -> Non
 
 
 def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
-    script = ROOT / "cli-tools" / "nddev_opencode.py"
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-readonly-lock-") as raw:
         target = Path(raw) / "target"
         token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
@@ -2946,17 +2945,12 @@ def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
             )
             return
         try:
-            completed = subprocess.run(
-                python_cli_argv(script, "status", "--target", str(target), "--json"),
-                env=subprocess_clean_env(),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if completed.returncode != 0:
-                errors.append(f"read-only lock smoke failed: {completed.stderr}")
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = manager.main(["status", "--target", str(target), "--json"])
+            if rc != 0:
+                errors.append(f"read-only lock smoke failed: {stderr.getvalue()}")
                 return
             if target.exists() or target.is_symlink():
                 errors.append("read-only lock smoke: status created target")
@@ -3092,24 +3086,31 @@ def check_adversarial_smokes(errors: list[str]) -> None:
     manager = load_manager(errors)
     if manager is None:
         return
-    check_fsync_fail_closed_smokes(manager, errors)
-    check_path_and_lock_smokes(manager, errors)
-    check_download_smokes(manager, errors)
-    check_noop_and_backup_smokes(manager, errors)
-    check_backup_validation_smokes(manager, errors)
-    check_restore_transaction_smokes(manager, errors)
-    check_managed_lifecycle_failure_smokes(manager, errors)
-    check_backup_transaction_smokes(manager, errors)
-    check_plan_mutation_parity_smokes(manager, errors)
-    check_platform_preflight_smokes(manager, errors)
-    check_lifecycle_order_smoke(manager, errors)
-    check_lock_failure_cleanup_smokes(manager, errors)
-    check_state_snapshot_churn_smokes(manager, errors)
-    check_software_transaction_smokes(manager, errors)
-    check_remove_cli_transaction_smokes(manager, errors)
-    check_json_parse_smokes(errors)
-    check_read_only_lock_smoke(manager, errors)
-    check_cli_failure_lock_cleanup_smoke(manager, errors)
+    with tempfile.TemporaryDirectory(prefix="nddev-opencode-validator-lock-root-") as raw:
+        lock_root = make_private_dir(Path(raw) / "locks")
+        original_lock_root = manager.system_lock_root
+        manager.system_lock_root = lambda: lock_root
+        try:
+            check_fsync_fail_closed_smokes(manager, errors)
+            check_path_and_lock_smokes(manager, errors)
+            check_download_smokes(manager, errors)
+            check_noop_and_backup_smokes(manager, errors)
+            check_backup_validation_smokes(manager, errors)
+            check_restore_transaction_smokes(manager, errors)
+            check_managed_lifecycle_failure_smokes(manager, errors)
+            check_backup_transaction_smokes(manager, errors)
+            check_plan_mutation_parity_smokes(manager, errors)
+            check_platform_preflight_smokes(manager, errors)
+            check_lifecycle_order_smoke(manager, errors)
+            check_lock_failure_cleanup_smokes(manager, errors)
+            check_state_snapshot_churn_smokes(manager, errors)
+            check_software_transaction_smokes(manager, errors)
+            check_remove_cli_transaction_smokes(manager, errors)
+            check_json_parse_smokes(errors)
+            check_read_only_lock_smoke(manager, errors)
+            check_cli_failure_lock_cleanup_smoke(manager, errors)
+        finally:
+            manager.system_lock_root = original_lock_root
 
 
 def main() -> int:

@@ -95,7 +95,7 @@
       "launch"
     ],
     "plan_mutates": false,
-    "read_only_commands_create_locks": false,
+    "read_only_commands_create_locks": true,
     "restore_backup_option": "--backup <0..9>",
     "status_executes_binary": false,
     "noop_plan_empty_changes": true,

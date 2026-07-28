@@ -440,8 +440,8 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("build/manifest.json: host precheck target command list mismatch")
     if command_policy.get("setup_update_uses_installed_identity") is not True:
         errors.append("build/manifest.json: setup update must use installed identity")
-    if command_policy.get("read_only_commands_create_locks") is not False:
-        errors.append("build/manifest.json: read-only commands must not create locks")
+    if command_policy.get("read_only_commands_create_locks") is not True:
+        errors.append("build/manifest.json: read-only commands must acquire lifecycle locks")
     if command_policy.get("noop_plan_empty_changes") is not True:
         errors.append("build/manifest.json: no-op plan contract missing")
     if command_policy.get("noop_mutation_writes_backup") is not False:
@@ -623,8 +623,8 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         errors.append("config/nddev-contract.json: host precheck target command list mismatch")
     if setup.get("update_uses_installed_identity") is not True:
         errors.append("config/nddev-contract.json: setup update must use installed identity")
-    if setup.get("read_only_commands_create_locks") is not False:
-        errors.append("config/nddev-contract.json: read-only commands must not create locks")
+    if setup.get("read_only_commands_create_locks") is not True:
+        errors.append("config/nddev-contract.json: read-only commands must acquire lifecycle locks")
     if setup.get("noop_plan_empty_changes") is not True:
         errors.append("config/nddev-contract.json: no-op plan contract missing")
     if setup.get("noop_mutation_writes_backup") is not False:
@@ -1114,9 +1114,10 @@ def identity_mtime_signature(manager: Any, path: Path) -> Any:
 
 def state_bundle_signature(manager: Any, root: Path, target: Path) -> Any:
     return {
-        "root": path_signature(manager, root),
-        "target": path_signature(manager, target),
-        "backup": path_signature(manager, manager.backup_root(target)),
+        "root_topology": path_signature(manager, root),
+        "target": identity_mtime_signature(manager, target),
+        "backup": identity_mtime_signature(manager, manager.backup_root(target)),
+        "lock_root": identity_mtime_signature(manager, manager.system_lock_root()),
     }
 
 
@@ -2681,33 +2682,144 @@ def check_json_parse_smokes(errors: list[str]) -> None:
             errors.append("non-JSON argparse behavior changed unexpectedly")
 
 
-def check_read_only_no_lock_smoke(manager: Any, errors: list[str]) -> None:
+def cleanup_validator_lock_file(manager: Any, path: Path, existed_before: bool) -> None:
+    if existed_before or not (path.exists() or path.is_symlink()):
+        return
+    manager.require_regular_file(path, f"validator-owned lock {path}", private=True)
+    path.unlink()
+    manager.fsync_directory(path.parent)
+
+
+def cleanup_validator_empty_lock_root(manager: Any, existed_before: bool) -> None:
+    root = manager.system_lock_root()
+    if existed_before or not (root.exists() or root.is_symlink()):
+        return
+    manager.require_real_private_directory(root, "validator-owned lock root")
+    if any(root.iterdir()):
+        return
+    root.rmdir()
+    manager.fsync_directory(root.parent)
+
+
+def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
     script = ROOT / "cli-tools" / "nddev_opencode.py"
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-readonly-lock-") as raw:
         target = Path(raw) / "target"
         token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
         external_lock = manager.system_lock_root() / f"{token}.lock"
+        coordination_lock = manager.coordination_lock_path()
+        lock_root_existed = manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
+        external_existed = external_lock.exists() or external_lock.is_symlink()
         if external_lock.exists() or external_lock.is_symlink():
             errors.append(
-                "read-only no-lock smoke: unique external lock unexpectedly exists before run"
+                "read-only lock smoke: unique external lock unexpectedly exists before run"
             )
             return
-        completed = subprocess.run(
-            python_cli_argv(script, "status", "--target", str(target), "--json"),
-            env=subprocess_clean_env(),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if completed.returncode != 0:
-            errors.append(f"read-only no-lock smoke failed: {completed.stderr}")
+        try:
+            completed = subprocess.run(
+                python_cli_argv(script, "status", "--target", str(target), "--json"),
+                env=subprocess_clean_env(),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                errors.append(f"read-only lock smoke failed: {completed.stderr}")
+                return
+            if target.exists() or target.is_symlink():
+                errors.append("read-only lock smoke: status created target")
+            if not (external_lock.exists() or external_lock.is_symlink()):
+                errors.append("read-only lock smoke: status did not create external lock")
+        finally:
+            try:
+                cleanup_validator_lock_file(manager, external_lock, external_existed)
+                cleanup_validator_lock_file(manager, coordination_lock, coordination_existed)
+                cleanup_validator_empty_lock_root(manager, lock_root_existed)
+            except BaseException as exc:  # noqa: BLE001 - cleanup failure is a validator failure.
+                errors.append(f"read-only lock smoke cleanup failed: {exc}")
+
+
+def check_lifecycle_order_smoke(manager: Any, errors: list[str]) -> None:
+    with tempfile.TemporaryDirectory(prefix="nddev-opencode-order-smoke-") as raw:
+        target = Path(raw) / "target"
+        events: list[str] = []
+        original_detect = manager.detect_supported_host
+        original_resolve = manager.resolve_target
+        original_resolve_locked = manager.resolve_target_locked
+        original_lock_file = manager.lock_file
+        original_status = manager.current_status
+
+        def traced_detect() -> dict[str, Any]:
+            events.append("host")
+            return fake_host()
+
+        def traced_resolve(raw_target: str | None) -> Path:
+            events.append("lexical-target")
+            if events != ["host", "lexical-target"]:
+                errors.append(f"lifecycle order: lexical target ran out of order: {events}")
+            return original_resolve(raw_target)
+
+        def traced_lock_file(path: Path) -> Any:
+            events.append(f"lock:{path.name}")
+            return original_lock_file(path)
+
+        def traced_resolve_locked(path: Path) -> Path:
+            events.append("locked-resolve")
+            if "lock:.coordination.lock" not in events:
+                errors.append("lifecycle order: locked target resolution preceded coordination lock")
+            return original_resolve_locked(path)
+
+        def traced_status(path: Path) -> dict[str, Any]:
+            events.append("status-read")
+            external_seen = any(
+                event.startswith("lock:")
+                and event != "lock:.coordination.lock"
+                and event.endswith(".lock")
+                for event in events
+            )
+            if not external_seen:
+                errors.append("lifecycle order: status read preceded canonical external lock")
+            return original_status(path)
+
+        lock_root_existed = manager.system_lock_root().exists() or manager.system_lock_root().is_symlink()
+        coordination_lock = manager.coordination_lock_path()
+        coordination_existed = coordination_lock.exists() or coordination_lock.is_symlink()
+        token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
+        external_lock = manager.system_lock_root() / f"{token}.lock"
+        external_existed = external_lock.exists() or external_lock.is_symlink()
+        manager.detect_supported_host = traced_detect
+        manager.resolve_target = traced_resolve
+        manager.resolve_target_locked = traced_resolve_locked
+        manager.lock_file = traced_lock_file
+        manager.current_status = traced_status
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                rc = manager.main(["status", "--target", str(target), "--json"])
+        finally:
+            manager.detect_supported_host = original_detect
+            manager.resolve_target = original_resolve
+            manager.resolve_target_locked = original_resolve_locked
+            manager.lock_file = original_lock_file
+            manager.current_status = original_status
+            try:
+                cleanup_validator_lock_file(manager, external_lock, external_existed)
+                cleanup_validator_lock_file(manager, coordination_lock, coordination_existed)
+                cleanup_validator_empty_lock_root(manager, lock_root_existed)
+            except BaseException as exc:  # noqa: BLE001 - cleanup failure is a validator failure.
+                errors.append(f"lifecycle order smoke cleanup failed: {exc}")
+        if rc != 0:
+            errors.append("lifecycle order smoke failed")
             return
-        if target.exists() or target.is_symlink():
-            errors.append("read-only no-lock smoke: status created target")
-        if external_lock.exists() or external_lock.is_symlink():
-            errors.append("read-only no-lock smoke: status created external lock")
+        expected_prefix = ["host", "lexical-target", "lock:.coordination.lock", "locked-resolve"]
+        if events[:4] != expected_prefix:
+            errors.append(f"lifecycle order prefix mismatch: {events}")
+        if not events or events[-1] != "status-read":
+            errors.append(f"lifecycle order status read missing or out of order: {events}")
 
 
 def check_cli_failure_lock_cleanup_smoke(manager: Any, errors: list[str]) -> None:
@@ -2756,11 +2868,12 @@ def check_adversarial_smokes(errors: list[str]) -> None:
     check_backup_transaction_smokes(manager, errors)
     check_plan_mutation_parity_smokes(manager, errors)
     check_platform_preflight_smokes(manager, errors)
+    check_lifecycle_order_smoke(manager, errors)
     check_lock_failure_cleanup_smokes(manager, errors)
     check_software_transaction_smokes(manager, errors)
     check_remove_cli_transaction_smokes(manager, errors)
     check_json_parse_smokes(errors)
-    check_read_only_no_lock_smoke(manager, errors)
+    check_read_only_lock_smoke(manager, errors)
     check_cli_failure_lock_cleanup_smoke(manager, errors)
 
 

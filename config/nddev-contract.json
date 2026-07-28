@@ -38,7 +38,7 @@
     "restore_command": "python3 cli-tools/nddev_opencode.py restore --backup <0..9> --target <absolute-target> [--json]",
     "remove_command": "python3 cli-tools/nddev_opencode.py remove --target <absolute-target> [--json]",
     "plan_mutates": false,
-    "read_only_commands_create_locks": false,
+    "read_only_commands_create_locks": true,
     "noop_plan_empty_changes": true,
     "noop_mutation_writes_backup": false,
     "host_precheck_before_target_resolution": [

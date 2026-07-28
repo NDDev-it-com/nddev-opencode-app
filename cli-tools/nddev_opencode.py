@@ -77,6 +77,7 @@ LEGACY_MANAGED_FILES = (
 KNOWN_MANAGED_FILES = tuple(dict.fromkeys((*MANAGED_FILES, *LEGACY_MANAGED_FILES)))
 CONFIG_MANAGED_KEYS = ("autoupdate", "share", "permission")
 FaultInjector = Callable[[str], None]
+TreeIdentityRow = tuple[str, str, int, tuple[int, int], int, int, str | None]
 
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -382,9 +383,11 @@ class SoftwareStateSnapshot:
     software_root_existed: bool
     current_existed: bool
     current_tree_digest: str | None
+    current_tree_identity: tuple[TreeIdentityRow, ...] | None
     bin_dir_existed: bool
     entrypoint: BinaryFileSnapshot
     stamp: BinaryFileSnapshot
+    directories: dict[str, DirectorySnapshotEntry]
 
 
 @dataclass(frozen=True)
@@ -412,6 +415,8 @@ class LockHandle:
     path: Path
     parent_existed: bool
     file_existed: bool
+    parent_snapshot: DirectorySnapshotEntry | None
+    container_snapshot: DirectorySnapshotEntry | None
 
 
 def fail(message: str) -> NoReturn:
@@ -521,6 +526,34 @@ def ensure_real_private_directory(path: Path, label: str, *, create: bool) -> bo
     if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
         fail(f"{label} must have mode 0700")
     return True
+
+
+def snapshot_private_directory_metadata(path: Path, label: str) -> DirectorySnapshotEntry | None:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        fail(f"{label} must be a real directory")
+    require_current_user_owner(info, label)
+    if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
+        fail(f"{label} must have mode 0700")
+    return DirectorySnapshotEntry(
+        mode=stat.S_IMODE(info.st_mode),
+        identity=identity_of(info),
+        atime_ns=info.st_atime_ns,
+        mtime_ns=info.st_mtime_ns,
+    )
+
+
+def restore_private_directory_metadata(
+    path: Path, snapshot: DirectorySnapshotEntry, label: str
+) -> None:
+    info = require_real_private_directory(path, label)
+    if identity_of(info) != snapshot.identity:
+        raise ConcurrentTargetChange(f"{label} identity changed during cleanup")
+    os.chmod(path, snapshot.mode)
+    os.utime(path, ns=(snapshot.atime_ns, snapshot.mtime_ns))
 
 
 def require_target_contained(target: Path, path: Path, label: str) -> Path:
@@ -671,13 +704,19 @@ def target_path(target: Path, relative: str) -> Path:
 def resolve_target(raw_target: str | None) -> Path:
     if not raw_target:
         fail("--target is required")
-    expanded = Path(raw_target).expanduser()
-    if not expanded.is_absolute():
+    target = Path(raw_target)
+    if not target.is_absolute():
         fail("--target must be an absolute path")
-    raw_info = stat_optional(expanded, "--target")
+    if target == Path(target.anchor):
+        fail("filesystem root cannot be a target")
+    return target
+
+
+def resolve_target_locked(lexical_target: Path) -> Path:
+    raw_info = stat_optional(lexical_target, "--target")
     if raw_info is not None and not stat.S_ISDIR(raw_info.st_mode):
         fail("--target must be a real directory")
-    target = expanded.resolve(strict=False)
+    target = lexical_target.resolve(strict=False)
     if target == Path(target.anchor):
         fail("filesystem root cannot be a target")
     require_directory(target.parent, "canonical --target parent")
@@ -2136,6 +2175,54 @@ def software_entrypoint(target: Path) -> Path:
     return target / "bin" / OPENCODE_COMMAND
 
 
+def software_directory_paths(target: Path) -> dict[str, Path]:
+    return {
+        ".": target,
+        "bin": target / "bin",
+        SOFTWARE_DIR_NAME: software_root(target),
+        f"{SOFTWARE_DIR_NAME}/{SOFTWARE_CURRENT_NAME}": software_current(target),
+        f"{SOFTWARE_DIR_NAME}/{SOFTWARE_CURRENT_NAME}/bin": software_current(target) / "bin",
+    }
+
+
+def tree_identity_signature(root: Path) -> tuple[TreeIdentityRow, ...]:
+    require_directory(root, "software tree", private=True)
+    rows: list[TreeIdentityRow] = []
+    total = 0
+    entries = [root, *sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix())]
+    for item in entries:
+        info = item.lstat()
+        relative = "." if item == root else item.relative_to(root).as_posix()
+        mode = stat.S_IMODE(info.st_mode)
+        identity = identity_of(info)
+        if stat.S_ISLNK(info.st_mode):
+            fail(f"software tree must not contain symlinks: {relative}")
+        if stat.S_ISDIR(info.st_mode):
+            require_current_user_owner(info, relative)
+            rows.append((relative, "dir", mode, identity, info.st_mtime_ns, 0, None))
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            fail(f"software tree entry must be a regular file: {relative}")
+        if info.st_nlink != 1:
+            fail(f"software tree entry must not be a hardlink: {relative}")
+        content = read_regular_file(item, relative, max_bytes=SOFTWARE_MAX_BYTES)[0]
+        total += len(content)
+        if total > SOFTWARE_MAX_BYTES:
+            fail("software tree is too large")
+        rows.append(
+            (
+                relative,
+                "file",
+                mode,
+                identity,
+                info.st_mtime_ns,
+                info.st_size,
+                sha256_bytes(content),
+            )
+        )
+    return tuple(rows)
+
+
 def preflight_software_paths(target: Path) -> None:
     if not ensure_target_directory(target, create=False):
         return
@@ -2153,6 +2240,29 @@ def preflight_software_paths(target: Path) -> None:
         require_current_user_owner(info, label)
         if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
             fail(f"{label} must have mode 0700")
+
+
+def snapshot_software_directories(target: Path) -> dict[str, DirectorySnapshotEntry]:
+    if not ensure_target_directory(target, create=False):
+        return {}
+    result: dict[str, DirectorySnapshotEntry] = {}
+    for relative, path in software_directory_paths(target).items():
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            fail(f"software directory must be a real directory: {relative}")
+        require_current_user_owner(info, f"software directory {relative}")
+        if stat.S_IMODE(info.st_mode) != OWNER_DIR_MODE:
+            fail(f"software directory must have mode 0700: {relative}")
+        result[relative] = DirectorySnapshotEntry(
+            mode=stat.S_IMODE(info.st_mode),
+            identity=identity_of(info),
+            atime_ns=info.st_atime_ns,
+            mtime_ns=info.st_mtime_ns,
+        )
+    return result
 
 
 def snapshot_binary_file(path: Path, label: str, *, max_bytes: int) -> BinaryFileSnapshot:
@@ -2192,6 +2302,9 @@ def snapshot_software_state(target: Path) -> SoftwareStateSnapshot:
         ),
         current_existed=current_exists,
         current_tree_digest=tree_sha256(software_current(target)) if current_exists else None,
+        current_tree_identity=(
+            tree_identity_signature(software_current(target)) if current_exists else None
+        ),
         bin_dir_existed=((target / "bin").exists() or (target / "bin").is_symlink()),
         entrypoint=snapshot_binary_file(
             software_entrypoint(target),
@@ -2203,6 +2316,7 @@ def snapshot_software_state(target: Path) -> SoftwareStateSnapshot:
             SOFTWARE_STAMP_NAME,
             max_bytes=METADATA_MAX_BYTES,
         ),
+        directories=snapshot_software_directories(target),
     )
 
 
@@ -2333,6 +2447,22 @@ def restore_binary_file(
     )
 
 
+def restore_software_directory_metadata(
+    target: Path,
+    snapshot: SoftwareStateSnapshot,
+    *,
+    fault_injection: FaultInjector | None = None,
+) -> None:
+    if not snapshot.target_existed:
+        return
+    paths = software_directory_paths(target)
+    for relative in sorted(snapshot.directories, key=lambda value: value.count("/"), reverse=True):
+        expected = snapshot.directories[relative]
+        path = paths[relative]
+        restore_private_directory_metadata(path, expected, f"software directory {relative}")
+        maybe_inject_fault(fault_injection, f"rollback-software:restore-dir:{relative}")
+
+
 def restore_software_state(
     target: Path,
     snapshot: SoftwareStateSnapshot,
@@ -2401,6 +2531,7 @@ def restore_software_state(
             target.rmdir()
             fsync_directory(target.parent)
             maybe_inject_fault(fault_injection, "rollback-software:remove-target")
+    restore_software_directory_metadata(target, snapshot, fault_injection=fault_injection)
     assert_software_snapshot(target, snapshot)
     maybe_inject_fault(fault_injection, "rollback-software:postcondition")
 
@@ -2448,6 +2579,11 @@ def assert_software_snapshot(target: Path, snapshot: SoftwareStateSnapshot) -> N
         and tree_sha256(software_current(target)) != snapshot.current_tree_digest
     ):
         fail("software current tree rollback postcondition digest mismatch")
+    if (
+        snapshot.current_tree_identity is not None
+        and tree_identity_signature(software_current(target)) != snapshot.current_tree_identity
+    ):
+        fail("software current tree rollback postcondition identity mismatch")
     assert_binary_snapshot(
         software_entrypoint(target),
         snapshot.entrypoint,
@@ -2460,6 +2596,15 @@ def assert_software_snapshot(target: Path, snapshot: SoftwareStateSnapshot) -> N
         SOFTWARE_STAMP_NAME,
         max_bytes=METADATA_MAX_BYTES,
     )
+    paths = software_directory_paths(target)
+    for relative, expected in snapshot.directories.items():
+        info = require_real_private_directory(paths[relative], f"software directory {relative}")
+        if identity_of(info) != expected.identity:
+            fail(f"software directory rollback postcondition identity mismatch: {relative}")
+        if stat.S_IMODE(info.st_mode) != expected.mode:
+            fail(f"software directory rollback postcondition mode mismatch: {relative}")
+        if info.st_mtime_ns != expected.mtime_ns:
+            fail(f"software directory rollback postcondition mtime mismatch: {relative}")
 
 
 def rollback_software_state(
@@ -3111,6 +3256,7 @@ def rollback_remove_cli_transaction(
     if transaction.stage_root.exists() or transaction.stage_root.is_symlink():
         remove_private_tree(transaction.stage_root, "remove-cli stage")
         maybe_inject_fault(fault_injection, "rollback-remove-cli:remove-stage")
+    restore_software_directory_metadata(target, transaction.snapshot, fault_injection=fault_injection)
     assert_software_snapshot(target, transaction.snapshot)
     maybe_inject_fault(fault_injection, "rollback-remove-cli:postcondition")
 
@@ -3307,6 +3453,8 @@ def install_cli(
             fault_injection=rollback_fault_injection,
         )
         cleanup_private_tree_required(undo_parent, "OpenCode software undo")
+        restore_software_directory_metadata(target, snapshot)
+        assert_software_snapshot(target, snapshot)
         raise
     try:
         cleanup_private_tree_required(
@@ -3338,6 +3486,8 @@ def install_cli(
         )
         cleanup_private_tree_required(stage_parent, "OpenCode stage")
         cleanup_private_tree_required(undo_parent, "OpenCode software undo")
+        restore_software_directory_metadata(target, snapshot)
+        assert_software_snapshot(target, snapshot)
         raise
     return {
         "ok": True,
@@ -3439,9 +3589,27 @@ def system_lock_root() -> Path:
     return base / f"nddev-opencode-locks-{uid if uid is not None else 'nouid'}"
 
 
+def coordination_lock_path() -> Path:
+    return system_lock_root() / ".coordination.lock"
+
+
 def lock_file(path: Path) -> LockHandle:
     parent_existed = path.parent.exists() or path.parent.is_symlink()
     file_existed = path.exists() or path.is_symlink()
+    parent_snapshot = (
+        snapshot_private_directory_metadata(path.parent, f"lock parent {path.parent}")
+        if parent_existed
+        else None
+    )
+    container_snapshot = None
+    if not parent_existed and (path.parent.parent.exists() or path.parent.parent.is_symlink()):
+        try:
+            container_snapshot = snapshot_private_directory_metadata(
+                path.parent.parent,
+                f"lock parent container {path.parent.parent}",
+            )
+        except ManagerError:
+            container_snapshot = None
     ensure_real_private_directory(path.parent, f"lock parent {path.parent}", create=True)
     parent_before = require_real_private_directory(path.parent, f"lock parent {path.parent}")
     flags = os.O_RDWR
@@ -3483,7 +3651,27 @@ def lock_file(path: Path) -> LockHandle:
     except BlockingIOError:
         os.close(fd)
         fail(f"target is already locked: {path}")
-    return LockHandle(fd=fd, path=path, parent_existed=parent_existed, file_existed=file_existed)
+    return LockHandle(
+        fd=fd,
+        path=path,
+        parent_existed=parent_existed,
+        file_existed=file_existed,
+        parent_snapshot=parent_snapshot,
+        container_snapshot=container_snapshot,
+    )
+
+
+def release_lock_handle(handle: LockHandle) -> list[BaseException]:
+    errors: list[BaseException] = []
+    try:
+        fcntl.flock(handle.fd, fcntl.LOCK_UN)
+    except OSError as exc:
+        errors.append(exc)
+    try:
+        os.close(handle.fd)
+    except OSError as exc:
+        errors.append(exc)
+    return errors
 
 
 def cleanup_created_lock(handle: LockHandle) -> None:
@@ -3493,6 +3681,12 @@ def cleanup_created_lock(handle: LockHandle) -> None:
             require_regular_file(handle.path, f"lock file {handle.path}", private=True)
             handle.path.unlink()
             fsync_directory(handle.path.parent)
+            if handle.parent_snapshot is not None:
+                restore_private_directory_metadata(
+                    handle.path.parent,
+                    handle.parent_snapshot,
+                    f"lock parent {handle.path.parent}",
+                )
         except BaseException as exc:
             cleanup_errors.append(exc)
     if not handle.parent_existed and (
@@ -3502,6 +3696,12 @@ def cleanup_created_lock(handle: LockHandle) -> None:
             require_real_private_directory(handle.path.parent, f"lock parent {handle.path.parent}")
             handle.path.parent.rmdir()
             fsync_directory(handle.path.parent.parent)
+            if handle.container_snapshot is not None:
+                restore_private_directory_metadata(
+                    handle.path.parent.parent,
+                    handle.container_snapshot,
+                    f"lock parent container {handle.path.parent.parent}",
+                )
         except OSError:
             pass
         except BaseException as exc:
@@ -3511,39 +3711,82 @@ def cleanup_created_lock(handle: LockHandle) -> None:
 
 
 @contextlib.contextmanager
-def target_locks(target: Path, *, create_target: bool) -> Iterator[None]:
-    canonical = str(target)
-    token = sha256_bytes(canonical.encode("utf-8"))
-    external = system_lock_root() / f"{token}.lock"
-    target_existed = target.exists() or target.is_symlink()
-    external_handle = lock_file(external)
+def internal_target_lock(target: Path, *, create_target: bool) -> Iterator[Path]:
     internal_handle: LockHandle | None = None
+    target_existed = target.exists() or target.is_symlink()
     success = False
     try:
         target_exists = ensure_target_directory(target, create=create_target)
         if target_exists:
             internal = target / ".nddev-opencode-lock" / "lock"
             internal_handle = lock_file(internal)
-        yield
+        yield target
         success = True
     finally:
+        release_errors: list[BaseException] = []
         if internal_handle is not None:
-            with contextlib.suppress(OSError):
-                fcntl.flock(internal_handle.fd, fcntl.LOCK_UN)
-                os.close(internal_handle.fd)
-        with contextlib.suppress(OSError):
-            fcntl.flock(external_handle.fd, fcntl.LOCK_UN)
-            os.close(external_handle.fd)
+            release_errors.extend(release_lock_handle(internal_handle))
         if not success:
+            cleanup_errors: list[BaseException] = []
             if internal_handle is not None:
-                with contextlib.suppress(ManagerError, OSError):
+                try:
                     cleanup_created_lock(internal_handle)
-            with contextlib.suppress(ManagerError, OSError):
-                cleanup_created_lock(external_handle)
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
             if not target_existed and (target.exists() or target.is_symlink()):
-                with contextlib.suppress(OSError):
+                try:
                     target.rmdir()
                     fsync_directory(target.parent)
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+            if cleanup_errors:
+                raise cleanup_errors[0]
+        if release_errors:
+            fail(f"cannot release lock safely: {release_errors[0]}")
+
+
+@contextlib.contextmanager
+def target_locks(
+    target: Path, *, create_target: bool, lock_internal: bool = True
+) -> Iterator[Path]:
+    coordination_handle = lock_file(coordination_lock_path())
+    external_handle: LockHandle | None = None
+    canonical_target: Path | None = None
+    success = False
+    try:
+        canonical_target = resolve_target_locked(target)
+        canonical = str(canonical_target)
+        token = sha256_bytes(canonical.encode("utf-8"))
+        external = system_lock_root() / f"{token}.lock"
+        external_handle = lock_file(external)
+        if lock_internal:
+            with internal_target_lock(canonical_target, create_target=create_target):
+                yield canonical_target
+        else:
+            if create_target:
+                fail("internal target lock is required before target creation")
+            yield canonical_target
+        success = True
+    finally:
+        release_errors: list[BaseException] = []
+        if external_handle is not None:
+            release_errors.extend(release_lock_handle(external_handle))
+        release_errors.extend(release_lock_handle(coordination_handle))
+        if not success:
+            cleanup_errors: list[BaseException] = []
+            if external_handle is not None:
+                try:
+                    cleanup_created_lock(external_handle)
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+            try:
+                cleanup_created_lock(coordination_handle)
+            except BaseException as exc:
+                cleanup_errors.append(exc)
+            if cleanup_errors:
+                raise cleanup_errors[0]
+        if release_errors:
+            fail(f"cannot release lock safely: {release_errors[0]}")
 
 
 def validate_launch_args(args: list[str], profile_id: str) -> None:
@@ -3615,7 +3858,8 @@ def validate_executable_for_launch(target: Path, stamp: dict[str, Any]) -> dict[
 
 def launch(target: Path, child_args: list[str], *, host: dict[str, Any] | None = None) -> int:
     _ = host if host is not None else detect_supported_host()
-    with target_locks(target, create_target=False):
+    with target_locks(target, create_target=False) as locked_target:
+        target = locked_target
         status = current_status(target)
         if not status.get("managed") or status.get("legacy") or status.get("drift"):
             fail("launch requires a current clean managed setup target")
@@ -3756,25 +4000,32 @@ def main(argv: list[str] | None = None) -> int:
         assert target is not None
         json_output = bool(getattr(args, "json", False))
 
-        if command == "status":
-            payload = current_status(target)
-        elif command == "software-status":
-            payload = software_status_payload(target)
-        elif command == "plan":
-            payload = plan_payload(target, render_profile(args.profile))
+        if command in {"status", "software-status", "plan"}:
+            with target_locks(target, create_target=False, lock_internal=False) as locked_target:
+                target = locked_target
+                if command == "status":
+                    payload = current_status(target)
+                elif command == "software-status":
+                    payload = software_status_payload(target)
+                else:
+                    payload = plan_payload(target, render_profile(args.profile))
         elif command == "update":
             if args.setup is not None or args.profile is not None:
                 fail("update reads the installed setup/profile; use switch to change profile")
-            profile = current_update_profile(target)
-            payload = lifecycle_noop_payload(target, profile, operation="update")
-            if payload is None:
-                with target_locks(target, create_target=False):
-                    payload = install_or_switch(
-                        target, current_update_profile(target), operation="update"
-                    )
+            with target_locks(target, create_target=False, lock_internal=False) as locked_target:
+                target = locked_target
+                profile = current_update_profile(target)
+                payload = lifecycle_noop_payload(target, profile, operation="update")
+                if payload is None:
+                    with internal_target_lock(target, create_target=False):
+                        profile = current_update_profile(target)
+                        payload = lifecycle_noop_payload(target, profile, operation="update")
+                        if payload is None:
+                            payload = install_or_switch(target, profile, operation="update")
         else:
             create_for_command = command in {"install", "install-cli"}
-            with target_locks(target, create_target=create_for_command):
+            with target_locks(target, create_target=create_for_command) as locked_target:
+                target = locked_target
                 if command == "install":
                     payload = install_or_switch(
                         target, render_profile(args.profile), operation="install"

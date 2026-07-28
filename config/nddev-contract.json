@@ -53,6 +53,7 @@
       "hardlink_alias_recovery": "mutation-only",
       "max_entries": 8,
       "max_objects": 512,
+      "serialized_max_bytes": 1048576,
       "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
       "status_plan_expose_paths": false,
       "mutation_drains_before_active_changes": true

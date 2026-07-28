@@ -54,6 +54,7 @@ OWNER_FILE_MODE = 0o600
 OWNER_EXEC_MODE = 0o700
 OWNER_DIR_MODE = 0o700
 METADATA_MAX_BYTES = 256 * 1024
+CLEANUP_JOURNAL_MAX_BYTES = 1024 * 1024
 MANAGED_PAYLOAD_MAX_BYTES = 1024 * 1024
 SOFTWARE_MAX_BYTES = 512 * 1024 * 1024
 PROCESS_OUTPUT_MAX_BYTES = 64 * 1024
@@ -3007,16 +3008,26 @@ def validate_cleanup_tombstone_complete(target: Path, entry: dict[str, Any]) -> 
 def cleanup_journal_payload(target: Path, entries: list[dict[str, Any]]) -> dict[str, Any]:
     if not entries or len(entries) > MAX_CLEANUP_PATHS:
         fail("cleanup journal entry count is invalid")
-    return {
+    payload = {
         "schema_version": CLEANUP_JOURNAL_SCHEMA,
         "product_name": PRODUCT_NAME,
         "build_version": VERSION,
         "canonical_target": str(target),
         "cleanup_parent": CLEANUP_PARENT_NAME,
         "max_entries": MAX_CLEANUP_PATHS,
+        "serialized_max_bytes": CLEANUP_JOURNAL_MAX_BYTES,
         "phase": "ready",
         "entries": entries,
     }
+    cleanup_journal_bytes(payload)
+    return payload
+
+
+def cleanup_journal_bytes(payload: dict[str, Any]) -> bytes:
+    content = canonical_json(payload)
+    if len(content) > CLEANUP_JOURNAL_MAX_BYTES:
+        fail("cleanup journal exceeds serialized size limit")
+    return content
 
 
 def publish_cleanup_journal(target: Path, payload: dict[str, Any]) -> None:
@@ -3030,7 +3041,7 @@ def publish_cleanup_journal(target: Path, payload: dict[str, Any]) -> None:
     final = cleanup_journal_path(target)
     if final.exists() or final.is_symlink():
         fail("cleanup journal already exists")
-    content = canonical_json(payload)
+    content = cleanup_journal_bytes(payload)
     fd = -1
     temporary: Path | None = None
     final_visible = False
@@ -3110,8 +3121,8 @@ def require_cleanup_journal_file(final: Path) -> os.stat_result:
         fail("cleanup journal must have mode 0600")
     if info.st_nlink not in {1, 2}:
         fail("cleanup journal must not have unexpected hard-link aliases")
-    if info.st_size > METADATA_MAX_BYTES:
-        fail("cleanup journal exceeds metadata size limit")
+    if info.st_size > CLEANUP_JOURNAL_MAX_BYTES:
+        fail("cleanup journal exceeds serialized size limit")
     return info
 
 
@@ -3120,8 +3131,15 @@ def read_cleanup_journal_payload(target: Path, final: Path) -> dict[str, Any]:
     before = require_cleanup_journal_file(final)
     if before.st_nlink != 1:
         fail("cleanup journal recovery requires exclusive target coordination")
-    content, _after = read_regular_file(final, CLEANUP_JOURNAL_NAME, private=True)
-    return parse_json_object(content, CLEANUP_JOURNAL_NAME)
+    content, _after = read_regular_file(
+        final,
+        CLEANUP_JOURNAL_NAME,
+        private=True,
+        max_bytes=CLEANUP_JOURNAL_MAX_BYTES,
+    )
+    payload = parse_json_object(content, CLEANUP_JOURNAL_NAME)
+    cleanup_journal_bytes(payload)
+    return payload
 
 
 def load_cleanup_journal(target: Path, *, recover_aliases: bool = False) -> dict[str, Any] | None:
@@ -3148,6 +3166,7 @@ def load_cleanup_journal(target: Path, *, recover_aliases: bool = False) -> dict
         "canonical_target",
         "cleanup_parent",
         "max_entries",
+        "serialized_max_bytes",
         "phase",
         "entries",
     }
@@ -3159,6 +3178,7 @@ def load_cleanup_journal(target: Path, *, recover_aliases: bool = False) -> dict
         or payload["canonical_target"] != str(target)
         or payload["cleanup_parent"] != CLEANUP_PARENT_NAME
         or payload["max_entries"] != MAX_CLEANUP_PATHS
+        or payload["serialized_max_bytes"] != CLEANUP_JOURNAL_MAX_BYTES
         or payload["phase"] != "ready"
     ):
         fail("cleanup journal identity or binding is invalid")
@@ -3210,29 +3230,48 @@ def promote_cleanup_tombstones(
         return None
     if load_cleanup_journal(target, recover_aliases=True) is not None:
         fail("cleanup pending state must be drained before new cleanup work")
+    directory_snapshots: dict[Path, tuple[str, DirectorySnapshotEntry | None]] = {}
+
+    def remember_directory(path: Path, label: str) -> None:
+        if path not in directory_snapshots:
+            directory_snapshots[path] = (
+                label,
+                snapshot_private_directory_metadata(path, label),
+            )
+
+    remember_directory(target, "cleanup target")
+    remember_directory(target.parent, "cleanup target parent")
+    parent = cleanup_parent(target)
+    parent_existed = parent.exists() or parent.is_symlink()
+    if parent_existed:
+        remember_directory(parent, "cleanup pending parent")
+    for source in existing_sources:
+        remember_directory(source.parent, f"cleanup source parent {source.parent}")
+    entries: list[dict[str, Any]] = []
+    planned_moves: list[tuple[Path, Path]] = []
+    for index, source in enumerate(existing_sources):
+        entry = cleanup_entry_for_path(target, source, index=index)
+        tombstone = cleanup_tombstone_path(target, entry["relative_name"])
+        if tombstone.exists() or tombstone.is_symlink():
+            fail(f"cleanup tombstone already exists: {entry['relative_name']}")
+        entries.append(entry)
+        planned_moves.append((source, tombstone))
+    payload = cleanup_journal_payload(target, entries)
     ensure_target_private_directory(
         target,
         CLEANUP_PARENT_NAME,
         "cleanup pending parent",
         create=True,
     )
-    parent = cleanup_parent(target)
     if any(parent.iterdir()):
         fail("cleanup pending parent contains unjournaled state")
-    entries: list[dict[str, Any]] = []
     moved: list[tuple[Path, Path]] = []
     try:
-        for index, source in enumerate(existing_sources):
-            entry = cleanup_entry_for_path(target, source, index=index)
-            tombstone = cleanup_tombstone_path(target, entry["relative_name"])
-            if tombstone.exists() or tombstone.is_symlink():
-                fail(f"cleanup tombstone already exists: {entry['relative_name']}")
+        for source, tombstone in planned_moves:
             os.replace(source, tombstone)
+            moved.append((tombstone, source))
             fsync_directory(source.parent)
             fsync_directory(parent)
-            moved.append((tombstone, source))
-            entries.append(entry)
-        payload = cleanup_journal_payload(target, entries)
         try:
             publish_cleanup_journal(target, payload)
         except CleanupJournalPublishedPending:
@@ -3247,8 +3286,27 @@ def promote_cleanup_tombstones(
                 fsync_directory(tombstone.parent)
                 fsync_directory(source.parent)
         if not any(parent.iterdir()):
-            parent.rmdir()
-            fsync_directory(target)
+            if parent_existed:
+                label, snapshot = directory_snapshots[parent]
+                if snapshot is not None:
+                    restore_private_directory_metadata(parent, snapshot, label)
+                    assert_private_directory_metadata(parent, snapshot, label)
+            else:
+                parent.rmdir()
+                fsync_directory(target)
+        for path, (label, snapshot) in sorted(
+            directory_snapshots.items(),
+            key=lambda item: len(item[0].parts),
+            reverse=True,
+        ):
+            if snapshot is None:
+                if path.exists() or path.is_symlink():
+                    fail(f"{label} rollback postcondition expected absence")
+                continue
+            if not (path.exists() or path.is_symlink()):
+                fail(f"{label} rollback postcondition expected presence")
+            restore_private_directory_metadata(path, snapshot, label)
+            assert_private_directory_metadata(path, snapshot, label)
         raise
 
 
@@ -4890,6 +4948,7 @@ def open_existing_anchor(
     anchor: str,
     target_digest: str | None = None,
     shared: bool,
+    recover_aliases: bool,
 ) -> LockHandle | None:
     parent_existed = path.parent.exists() or path.parent.is_symlink()
     if not parent_existed:
@@ -4920,10 +4979,13 @@ def open_existing_anchor(
         return descriptor, identity
 
     try:
-        fd, file_identity = open_locked(fcntl.LOCK_EX, recover_aliases=True)
+        fd, file_identity = open_locked(
+            fcntl.LOCK_SH if shared and not recover_aliases else fcntl.LOCK_EX,
+            recover_aliases=recover_aliases,
+        )
         if fd < 0:
             return None
-        if shared:
+        if shared and recover_aliases:
             release_errors: list[BaseException] = []
             try:
                 fcntl.flock(fd, fcntl.LOCK_UN)
@@ -5057,6 +5119,7 @@ def publish_anchor(
                 anchor=anchor,
                 target_digest=target_digest,
                 shared=shared,
+                recover_aliases=True,
             )
             if existing is None:
                 raise ConcurrentTargetChange(
@@ -5123,6 +5186,7 @@ def acquire_anchor(
             anchor=anchor,
             target_digest=target_digest,
             shared=shared,
+            recover_aliases=True,
         )
         if existing is not None:
             return existing
@@ -5137,6 +5201,7 @@ def acquire_anchor(
         anchor=anchor,
         target_digest=target_digest,
         shared=shared,
+        recover_aliases=False,
     )
 
 

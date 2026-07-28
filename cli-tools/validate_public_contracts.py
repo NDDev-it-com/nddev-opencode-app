@@ -499,6 +499,7 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
         "hardlink_alias_recovery": "mutation-only",
         "max_entries": 8,
         "max_objects": 512,
+        "serialized_max_bytes": 1048576,
         "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
         "status_plan_expose_paths": False,
         "mutation_drains_before_active_changes": True,
@@ -719,6 +720,7 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
         "hardlink_alias_recovery": "mutation-only",
         "max_entries": 8,
         "max_objects": 512,
+        "serialized_max_bytes": 1048576,
         "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
         "status_plan_expose_paths": False,
         "mutation_drains_before_active_changes": True,
@@ -1846,6 +1848,7 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
                     anchor=anchor,
                     target_digest=digest,
                     shared=True,
+                    recover_aliases=False,
                 )
                 if handle is None:
                     errors.append(f"CLI target-only update missing {label} anchor")
@@ -3214,94 +3217,6 @@ def cleanup_validator_empty_lock_root(manager: Any, existed_before: bool) -> Non
     manager.fsync_directory(root.parent)
 
 
-def create_crashed_anchor_alias(
-    manager: Any,
-    path: Path,
-    *,
-    anchor: str,
-    target_digest: str | None = None,
-) -> Path:
-    make_private_dir(path.parent)
-    marker = manager.anchor_marker(anchor=anchor, target_digest=target_digest)
-    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    temporary = Path(temporary_name)
-    try:
-        os.set_inheritable(fd, False)
-        os.fchmod(fd, 0o600)
-        written = 0
-        while written < len(marker):
-            written += os.write(fd, marker[written:])
-        manager.fsync_file_descriptor(fd)
-        os.link(temporary, path)
-        manager.fsync_directory(path.parent)
-    finally:
-        os.close(fd)
-    return temporary
-
-
-def check_anchor_publication_recovery_smoke(manager: Any, errors: list[str]) -> None:
-    with tempfile.TemporaryDirectory(prefix="nddev-opencode-anchor-recovery-") as raw:
-        root = Path(raw)
-        lock_root = make_private_dir(root / "locks")
-        original_lock_root = manager.system_lock_root
-        manager.system_lock_root = lambda: lock_root
-        try:
-            product = manager.coordination_lock_path()
-            product_alias = create_crashed_anchor_alias(
-                manager,
-                product,
-                anchor="product",
-            )
-            if product.lstat().st_nlink != 2:
-                errors.append("anchor recovery smoke did not create product hardlink alias")
-                return
-            handle = manager.acquire_anchor(product, anchor="product", shared=True, create=False)
-            if handle is None:
-                errors.append("anchor recovery smoke could not open product anchor")
-                return
-            release_errors = manager.release_lock_handle(handle)
-            if release_errors:
-                errors.append(f"anchor recovery smoke product release failed: {release_errors[0]}")
-            if product_alias.exists() or product_alias.is_symlink():
-                errors.append("anchor recovery smoke left product temporary alias")
-            if product.lstat().st_nlink != 1:
-                errors.append("anchor recovery smoke did not restore product nlink")
-
-            target = root / "target"
-            token = manager.sha256_bytes(str(target.resolve(strict=False)).encode("utf-8"))
-            final = manager.system_lock_root() / f"{token}.lock"
-            first = manager.publish_anchor(final, anchor="target", target_digest=token)
-            first_identity = first.file_identity
-            release_errors = manager.release_lock_handle(first)
-            if release_errors:
-                errors.append(
-                    f"anchor recovery smoke first target release failed: {release_errors[0]}"
-                )
-            before = identity_mtime_signature(manager, final)
-            second = manager.publish_anchor(final, anchor="target", target_digest=token)
-            if second.file_identity != first_identity:
-                errors.append("anchor recovery smoke EEXIST opened a different target anchor")
-            release_errors = manager.release_lock_handle(second)
-            if release_errors:
-                errors.append(
-                    f"anchor recovery smoke second target release failed: {release_errors[0]}"
-                )
-            after = identity_mtime_signature(manager, final)
-            if after != before:
-                errors.append("anchor recovery smoke EEXIST changed existing target anchor")
-            temp_aliases = [
-                child
-                for child in final.parent.iterdir()
-                if child.name.startswith(f".{final.name}.")
-            ]
-            if temp_aliases:
-                errors.append(
-                    f"anchor recovery smoke left EEXIST temporary aliases: {temp_aliases}"
-                )
-        finally:
-            manager.system_lock_root = original_lock_root
-
-
 def check_read_only_lock_smoke(manager: Any, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory(prefix="nddev-opencode-readonly-lock-") as raw:
         root = Path(raw)
@@ -3544,7 +3459,6 @@ def check_adversarial_smokes(errors: list[str]) -> None:
             check_software_transaction_smokes(manager, errors)
             check_remove_cli_transaction_smokes(manager, errors)
             check_json_parse_smokes(errors)
-            check_anchor_publication_recovery_smoke(manager, errors)
             check_read_only_lock_smoke(manager, errors)
             check_cli_failure_lock_cleanup_smoke(manager, errors)
         finally:

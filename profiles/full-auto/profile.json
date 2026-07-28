@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "id": "full-auto",
+  "description": "Default fully autonomous OpenCode profile using the official permission scalar and disabled sharing.",
+  "default": true,
+  "managed_config_keys": [
+    "autoupdate",
+    "share",
+    "permission"
+  ]
+}

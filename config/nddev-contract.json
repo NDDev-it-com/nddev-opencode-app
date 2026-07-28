@@ -1,39 +1,65 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "product_name": "nddev-opencode-app",
   "display_name": "NDDev OpenCode Setup Manager",
   "github_repository": "NDDev-it-com/nddev-opencode-app",
   "license": "AGPL-3.0-or-later",
-  "description": "Dependency-free manager that installs, switches, restores, and removes selected OpenCode setup variants in an explicit isolated OpenCode config target.",
+  "description": "Dependency-free manager that installs, switches, restores, migrates, launches, and removes a native OpenCode nddev-builder setup in an explicit isolated target.",
   "manifest_ref": "build/manifest.json",
   "version_ref": "build/version.json",
-  "source_root": "setups",
+  "source_roots": {
+    "setups": "setups",
+    "profiles": "profiles"
+  },
   "setup_system": {
     "catalog_root": "setups",
+    "profile_root": "profiles",
     "setup_ids": [
-      "safe",
-      "balanced",
-      "full-auto"
+      "nddev-builder"
     ],
-    "selection_option": "--setup <id>",
+    "profile_ids": [
+      "full-auto",
+      "safe"
+    ],
+    "default_setup": "nddev-builder",
+    "default_profile": "full-auto",
+    "selection_options": [
+      "--setup nddev-builder",
+      "--profile full-auto|safe"
+    ],
     "list_command": "python3 cli-tools/nddev_opencode.py list [--json]",
     "status_command": "python3 cli-tools/nddev_opencode.py status --target <absolute-target> [--json]",
-    "plan_command": "python3 cli-tools/nddev_opencode.py plan --setup <id> --target <absolute-target> [--json]",
-    "install_command": "python3 cli-tools/nddev_opencode.py install --setup <id> --target <absolute-target> [--json]",
-    "switch_command": "python3 cli-tools/nddev_opencode.py switch --setup <id> --target <absolute-target> [--json]",
+    "plan_command": "python3 cli-tools/nddev_opencode.py plan --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
+    "install_command": "python3 cli-tools/nddev_opencode.py install --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
+    "switch_command": "python3 cli-tools/nddev_opencode.py switch --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
+    "migrate_command": "python3 cli-tools/nddev_opencode.py migrate --target <absolute-target> [--profile <id>] [--json]",
     "restore_command": "python3 cli-tools/nddev_opencode.py restore --backup <0..9> --target <absolute-target> [--json]",
     "remove_command": "python3 cli-tools/nddev_opencode.py remove --target <absolute-target> [--json]",
-    "plan_mutates": false
+    "plan_mutates": false,
+    "read_only_commands_create_locks": false,
+    "noop_plan_empty_changes": true,
+    "noop_mutation_writes_backup": false
   },
   "managed_state": {
     "target_env": "OPENCODE_CONFIG_DIR",
     "config_file": "opencode.json",
     "stamp_file": "NDDEV-OPENCODE-SETUP.json",
-    "stamp_schema": 1,
+    "stamp_schema": 2,
     "backup_slots": 10,
     "managed_file_mode": "0600",
     "new_target_mode": "0700",
     "managed_files": [
+      "opencode.json",
+      "AGENTS.md",
+      "plugins/nddev-builder.js",
+      "skills/nddev-builder/SKILL.md",
+      "skills/nddev-builder/references/native-surfaces.md",
+      "skills/nddev-builder/references/security-boundary.md",
+      "agents/nddev-builder.md",
+      "commands/nddev-orient.md",
+      "commands/nddev-validate.md"
+    ],
+    "legacy_managed_files": [
       "opencode.json",
       "AGENTS.md",
       "plugins/nddev-builder.js",
@@ -45,7 +71,33 @@
       "share",
       "permission"
     ],
-    "preserve_other_state": true
+    "preserve_other_state": true,
+    "restore_absent_known_paths_as_removals": true,
+    "restore_transaction_rollback": true,
+    "backup_envelope_exact_keys": true,
+    "backup_files_exact_known_paths": true,
+    "backup_envelope_schema": 3,
+    "backup_sizes_exact_present_files": true,
+    "backup_digests_exact_present_files": true
+  },
+  "profiles": {
+    "full-auto": {
+      "default": true,
+      "opencode_config": {
+        "$schema": "https://opencode.ai/config.json",
+        "autoupdate": false,
+        "share": "disabled",
+        "permission": "allow"
+      }
+    },
+    "safe": {
+      "default": false,
+      "share": "disabled",
+      "edits": "deny",
+      "shell": "ask",
+      "external_directory": "ask",
+      "nddev_builder_skill": "allow"
+    }
   },
   "builder": {
     "id": "nddev-builder",
@@ -54,17 +106,20 @@
     "native_surfaces": {
       "plugin_directory": "plugins/",
       "skill_directory": "skills/nddev-builder/SKILL.md",
-      "agent_directory": "agents/nddev-builder.md"
+      "agent_directory": "agents/nddev-builder.md",
+      "command_directory": "commands/"
     },
     "managed_files": [
       "plugins/nddev-builder.js",
       "skills/nddev-builder/SKILL.md",
-      "agents/nddev-builder.md"
+      "skills/nddev-builder/references/native-surfaces.md",
+      "skills/nddev-builder/references/security-boundary.md",
+      "agents/nddev-builder.md",
+      "commands/nddev-orient.md",
+      "commands/nddev-validate.md"
     ],
     "enabled_in_setups": [
-      "safe",
-      "balanced",
-      "full-auto"
+      "nddev-builder"
     ]
   },
   "runtime_launch": {
@@ -74,56 +129,100 @@
     "forwards_arguments": true,
     "forwards_child_exit_code": true,
     "target_environment_scope": "child-process-only",
-    "successful_child_output_wrapped": false
+    "successful_child_output_wrapped": false,
+    "source_proven_forced_environment": {
+      "OPENCODE_CONFIG": "<target>/opencode.json",
+      "OPENCODE_CONFIG_DIR": "<target>",
+      "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+      "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
+      "OPENCODE_DISABLE_CLAUDE_CODE": "1",
+      "OPENCODE_DISABLE_SHARE": "1"
+    },
+    "caller_opencode_env_inheritance": false,
+    "credential_inheritance": false,
+    "locks": {
+      "external_then_internal": true,
+      "persistent_lock_files": true,
+      "held_through_child": true,
+      "lock_fds_close_on_exec": true,
+      "parent_real_private": true,
+      "open_no_follow": true,
+      "identity_revalidated": true,
+      "mode": "0600",
+      "nlink": 1,
+      "same_uid_absolute_tamper_proof_claim": false
+    },
+    "runtime_dirs_real_private": true,
+    "reject_runtime_dir_symlink": true,
+    "pre_handoff_checks": [
+      "supported product host",
+      "managed setup stamp",
+      "managed drift",
+      "software stamp",
+      "target-owned executable identity",
+      "target-owned executable digest"
+    ],
+    "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
+    "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
+    "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map"
   },
   "software_lifecycle": {
     "stamp_file": "NDDEV-OPENCODE-SOFTWARE.json",
-    "stamp_schema": 1,
+    "stamp_schema": 2,
     "status_executes_binary": false,
-    "install_precondition": "install-cli refuses any existing target-owned software presence unless it is already current",
+    "install_precondition": "install-cli refuses partial or drifted target-owned software unless it is already current",
     "update_precondition": "update-cli repairs existing target-owned software presence and refuses absent software state",
-    "package_manager": "bun",
-    "install_argv": [
-      "add",
-      "--global",
-      "--exact",
-      "--trust",
-      "opencode-ai@1.18.6"
-    ],
-    "trust_required": true,
-    "trust_reason": "Official opencode-ai@1.18.6 declares postinstall=node ./postinstall.mjs and platform optional packages",
+    "remove_command": "python3 cli-tools/nddev_opencode.py remove-cli --target <absolute-target> [--json]",
+    "install_channel": "official-github-release-asset",
+    "package_manager": null,
     "target_owned": true,
     "software_root": ".nddev-opencode-software/current",
     "entrypoint": "bin/opencode",
-    "entrypoint_kind": "bun-native-bin",
-    "persisted_stage_paths": [
-      "install/global",
-      "bin"
-    ],
-    "ephemeral_stage_paths": [
-      "home",
-      "xdg-config",
-      "cache",
-      "tmp"
-    ],
-    "stage_env": {
-      "BUN_INSTALL_GLOBAL_DIR": "<stage>/install/global",
-      "BUN_INSTALL_BIN": "<stage>/bin",
-      "BUN_INSTALL_CACHE_DIR": "<stage>/cache",
-      "HOME": "<stage>/home",
-      "XDG_CONFIG_HOME": "<stage>/xdg-config",
-      "TMPDIR": "<stage>/tmp"
-    },
+    "entrypoint_kind": "official-single-binary",
     "staged_version_probe": [
       "bin/opencode",
       "--version"
     ],
-    "registry": {
-      "integrity": "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w==",
-      "shasum": "de8f32d2328a3f07891f263ce7f2b6f790324e13"
+    "artifact_ref": "build/version.json:artifacts",
+    "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
+    "release_ref": "build/version.json:release",
+    "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
+    "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
+    "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
+    "host_check_before_network": true,
+    "host_check_before_stage": true,
+    "download_policy": {
+      "content_length_required": true,
+      "bounded_chunked_read": true,
+      "fail_on_short_or_long_body": true
+    },
+    "transaction_rollback": {
+      "fresh_install": true,
+      "update": true,
+      "remove": true,
+      "restores_current_entrypoint_stamp_and_absence": true,
+      "rollback_fault_retry": true,
+      "final_cleanup_non_raising": true
     },
     "credential_inheritance": false,
-    "rollback_on_swap_failure": true
+    "rollback_on_swap_failure": true,
+    "safe_extraction": {
+      "single_regular_binary": true,
+      "reject_traversal": true,
+      "reject_symlink": true,
+      "reject_hardlink": true,
+      "reject_device": true
+    }
+  },
+  "migration": {
+    "from_schema": 1,
+    "legacy_setup_map": {
+      "full-auto": "full-auto",
+      "safe": "safe",
+      "balanced": "explicit-profile-required"
+    },
+    "preserve_unmanaged_config_keys": true,
+    "legacy_software_requires_update_cli": true
   },
   "safety": {
     "absolute_target_required": true,
@@ -136,6 +235,26 @@
     "reject_symlink_managed_files": true,
     "reject_hardlinked_managed_files": true,
     "rollback_on_failure": true,
+    "restore_transaction_rollback": true,
+    "backup_envelope_exact_keys": true,
+    "backup_files_exact_known_paths": true,
+    "backup_envelope_schema": 3,
+    "backup_sizes_exact_present_files": true,
+    "backup_digests_exact_present_files": true,
+    "backup_transactional_slot_replacement": true,
+    "backup_final_cleanup_non_raising": true,
+    "failed_mutation_writes_backup": false,
+    "noop_mutation_writes_backup": false,
+    "atomic_write_order": [
+      "temp-write",
+      "chmod",
+      "file-fsync",
+      "replace",
+      "parent-fsync",
+      "postcondition"
+    ],
+    "fsync_errors_fail_closed": true,
+    "post_replace_failure_rolls_back": true,
     "bounded_reads": true,
     "max_backups": 10
   },
@@ -146,13 +265,6 @@
     "official_source": {
       "repository": "https://github.com/anomalyco/opencode",
       "docs": "https://opencode.ai/docs/"
-    },
-    "official_docs": {
-      "config": "https://opencode.ai/docs/config/",
-      "permissions": "https://opencode.ai/docs/permissions/",
-      "plugins": "https://opencode.ai/docs/plugins/",
-      "skills": "https://opencode.ai/docs/skills/",
-      "agents": "https://opencode.ai/docs/agents/"
     }
   }
 }

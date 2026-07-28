@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
-  "share": "manual",
+  "share": "disabled",
   "permission": {
     "bash": "ask",
     "edit": "deny",
@@ -11,7 +11,12 @@
     "list": "allow",
     "lsp": "ask",
     "question": "allow",
-    "read": "allow",
+    "read": {
+      "*": "allow",
+      "**/.env": "deny",
+      "**/.env.*": "deny",
+      "**/.env.example": "allow"
+    },
     "skill": {
       "*": "ask",
       "nddev-builder": "allow"

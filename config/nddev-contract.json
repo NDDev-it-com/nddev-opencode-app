@@ -31,7 +31,8 @@
     "status_command": "python3 cli-tools/nddev_opencode.py status --target <absolute-target> [--json]",
     "plan_command": "python3 cli-tools/nddev_opencode.py plan --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
     "install_command": "python3 cli-tools/nddev_opencode.py install --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
-    "update_command": "python3 cli-tools/nddev_opencode.py update --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
+    "update_command": "python3 cli-tools/nddev_opencode.py update --target <absolute-target> [--json]",
+    "update_uses_installed_identity": true,
     "switch_command": "python3 cli-tools/nddev_opencode.py switch --setup nddev-builder --profile <id> --target <absolute-target> [--json]",
     "migrate_command": "python3 cli-tools/nddev_opencode.py migrate --target <absolute-target> [--profile <id>] [--json]",
     "restore_command": "python3 cli-tools/nddev_opencode.py restore --backup <0..9> --target <absolute-target> [--json]",
@@ -39,7 +40,22 @@
     "plan_mutates": false,
     "read_only_commands_create_locks": false,
     "noop_plan_empty_changes": true,
-    "noop_mutation_writes_backup": false
+    "noop_mutation_writes_backup": false,
+    "host_precheck_before_target_resolution": [
+      "status",
+      "plan",
+      "install",
+      "update",
+      "switch",
+      "migrate",
+      "restore",
+      "remove",
+      "software-status",
+      "install-cli",
+      "update-cli",
+      "remove-cli",
+      "launch"
+    ]
   },
   "managed_state": {
     "target_env": "OPENCODE_CONFIG_DIR",

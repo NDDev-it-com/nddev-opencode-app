@@ -78,6 +78,7 @@
       "darwin",
       "linux-glibc",
       "linux-musl",
+      "windows",
       "x64-baseline"
     ],
     "desktop_packages_excluded_from_cli_manager": [
@@ -86,7 +87,41 @@
       "AppImage"
     ],
     "ubuntu_glibc_version_floor": null,
-    "ubuntu_glibc_version_floor_note": "no-official-floor"
+    "ubuntu_glibc_version_floor_note": "no-official-floor",
+    "product_unsupported_cli_assets": {
+      "windows": {
+        "windows-arm64": {
+          "id": 492338717,
+          "name": "opencode-windows-arm64.zip",
+          "size": 57687772,
+          "sha256": "3a2c5a6f246bd0fdb395b35d8cc60f1be86f7f794a22cb517d2fe8de9aa951b4",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-arm64.zip",
+          "format": "zip",
+          "product_supported": false,
+          "unsupported_category": "windows"
+        },
+        "windows-x64": {
+          "id": 492338712,
+          "name": "opencode-windows-x64.zip",
+          "size": 59527527,
+          "sha256": "85baa5de531db8d611fb5d9a62ffee00f6de69ae26e4845ec091dd2da4eb5fd1",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64.zip",
+          "format": "zip",
+          "product_supported": false,
+          "unsupported_category": "windows"
+        },
+        "windows-x64-baseline": {
+          "id": 492338711,
+          "name": "opencode-windows-x64-baseline.zip",
+          "size": 59527534,
+          "sha256": "91d1b2e0faf5210ff06ae7d1014905531dfea723ab088455e553deafdb722006",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64-baseline.zip",
+          "format": "zip",
+          "product_supported": false,
+          "unsupported_category": "windows"
+        }
+      }
+    }
   },
   "artifact_product_host_map": {
     "darwin-arm64": {

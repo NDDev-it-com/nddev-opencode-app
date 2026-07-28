@@ -192,6 +192,38 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "tar.gz",
     },
 }
+OBSERVED_UNSUPPORTED_ARTIFACTS: dict[str, dict[str, Any]] = {
+    "windows-arm64": {
+        "id": 492338717,
+        "name": "opencode-windows-arm64.zip",
+        "size": 57687772,
+        "sha256": "3a2c5a6f246bd0fdb395b35d8cc60f1be86f7f794a22cb517d2fe8de9aa951b4",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-arm64.zip",
+        "format": "zip",
+        "product_supported": False,
+        "unsupported_category": "windows",
+    },
+    "windows-x64": {
+        "id": 492338712,
+        "name": "opencode-windows-x64.zip",
+        "size": 59527527,
+        "sha256": "85baa5de531db8d611fb5d9a62ffee00f6de69ae26e4845ec091dd2da4eb5fd1",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64.zip",
+        "format": "zip",
+        "product_supported": False,
+        "unsupported_category": "windows",
+    },
+    "windows-x64-baseline": {
+        "id": 492338711,
+        "name": "opencode-windows-x64-baseline.zip",
+        "size": 59527534,
+        "sha256": "91d1b2e0faf5210ff06ae7d1014905531dfea723ab088455e553deafdb722006",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64-baseline.zip",
+        "format": "zip",
+        "product_supported": False,
+        "unsupported_category": "windows",
+    },
+}
 
 LAUNCH_FORCED_ENV = {
     "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
@@ -249,7 +281,15 @@ LAUNCH_BLOCKED_COMMANDS = {
     "web": "network/browser side effect",
 }
 HOST_PRECHECK_COMMANDS = {
+    "status",
     "software-status",
+    "plan",
+    "install",
+    "update",
+    "switch",
+    "migrate",
+    "restore",
+    "remove",
     "install-cli",
     "update-cli",
     "remove-cli",
@@ -331,6 +371,9 @@ class ManagedMutationTransaction:
 class BinaryFileSnapshot:
     content: bytes | None
     mode: int | None
+    identity: tuple[int, int] | None
+    mtime_ns: int | None
+    size: int | None
 
 
 @dataclass(frozen=True)
@@ -1809,6 +1852,35 @@ def plan_payload(target: Path, profile: Profile) -> dict[str, Any]:
     }
 
 
+def lifecycle_noop_payload(target: Path, profile: Profile, *, operation: str) -> dict[str, Any] | None:
+    desired = desired_state_with_stamp(target, profile)
+    changes = state_delta(target, desired)
+    if changes:
+        return None
+    return {
+        "ok": True,
+        "operation": operation,
+        "setup_id": CONTENT_SETUP_ID,
+        "profile_id": profile.profile_id,
+        "target": str(target),
+        "changed": False,
+        "changes": [],
+        "backup": None,
+    }
+
+
+def current_update_profile(target: Path) -> Profile:
+    stamp = load_stamp(target)
+    if stamp is None:
+        fail("update requires a current managed schema-2 target")
+    if stamp.get("schema_version") != STAMP_SCHEMA:
+        fail("update requires a current managed schema-2 target; use migrate for legacy state")
+    drift = detect_drift(target, stamp)
+    if drift:
+        fail(f"update requires a clean managed target: {drift}")
+    return render_profile(str(stamp["profile_id"]))
+
+
 def install_or_switch(
     target: Path,
     profile: Profile,
@@ -2085,15 +2157,27 @@ def snapshot_binary_file(path: Path, label: str, *, max_bytes: int) -> BinaryFil
     try:
         info = path.lstat()
     except FileNotFoundError:
-        return BinaryFileSnapshot(content=None, mode=None)
+        return BinaryFileSnapshot(
+            content=None,
+            mode=None,
+            identity=None,
+            mtime_ns=None,
+            size=None,
+        )
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
         fail(f"{label} must be a regular non-symlink file")
     if info.st_nlink != 1:
         fail(f"{label} must not have hard-link aliases")
     require_current_user_owner(info, label)
     mode = stat.S_IMODE(info.st_mode)
-    content = read_regular_file(path, label, max_bytes=max_bytes)[0]
-    return BinaryFileSnapshot(content=content, mode=mode)
+    content, final = read_regular_file(path, label, max_bytes=max_bytes)
+    return BinaryFileSnapshot(
+        content=content,
+        mode=mode,
+        identity=identity_of(final),
+        mtime_ns=final.st_mtime_ns,
+        size=final.st_size,
+    )
 
 
 def snapshot_software_state(target: Path) -> SoftwareStateSnapshot:
@@ -2154,11 +2238,60 @@ def cleanup_private_tree_required(
         raise first_error
 
 
+def move_software_original_to_undo(
+    path: Path,
+    undo_path: Path,
+    label: str,
+    *,
+    executable: bool = False,
+    private: bool = False,
+    fault_injection: FaultInjector | None = None,
+) -> bool:
+    info = stat_optional(path, label)
+    if info is None:
+        return False
+    require_regular_file(path, label, executable=executable, private=private)
+    if undo_path.exists() or undo_path.is_symlink():
+        fail(f"software undo path already exists: {label}")
+    require_real_private_directory(undo_path.parent, "OpenCode software undo")
+    os.replace(path, undo_path)
+    fsync_directory(path.parent)
+    fsync_directory(undo_path.parent)
+    maybe_inject_fault(fault_injection, f"software:move-original:{label}")
+    return True
+
+
+def binary_snapshot_matches(
+    path: Path,
+    snapshot: BinaryFileSnapshot,
+    label: str,
+    *,
+    max_bytes: int,
+) -> bool:
+    if snapshot.content is None:
+        return not (path.exists() or path.is_symlink())
+    try:
+        info = require_regular_file(path, label)
+    except ManagerError:
+        return False
+    if (
+        snapshot.identity is None
+        or identity_of(info) != snapshot.identity
+        or stat.S_IMODE(info.st_mode) != snapshot.mode
+        or info.st_mtime_ns != snapshot.mtime_ns
+        or info.st_size != snapshot.size
+    ):
+        return False
+    return read_regular_file(path, label, max_bytes=max_bytes)[0] == snapshot.content
+
+
 def restore_binary_file(
     path: Path,
     snapshot: BinaryFileSnapshot,
     label: str,
     *,
+    original_path: Path | None = None,
+    max_bytes: int,
     fault_injection: FaultInjector | None = None,
 ) -> None:
     if snapshot.content is None:
@@ -2169,6 +2302,25 @@ def restore_binary_file(
             fsync_directory(path.parent)
             maybe_inject_fault(fault_injection, f"rollback-software:unlink:{label}")
         return
+    if binary_snapshot_matches(path, snapshot, label, max_bytes=max_bytes):
+        return
+    if original_path is not None and (original_path.exists() or original_path.is_symlink()):
+        require_regular_file(original_path, f"original {label}")
+        if path.exists() or path.is_symlink():
+            require_regular_file(path, label)
+            path.unlink()
+            fsync_directory(path.parent)
+            maybe_inject_fault(fault_injection, f"rollback-software:remove-new:{label}")
+        make_parent_directories(path)
+        os.replace(original_path, path)
+        fsync_directory(path.parent)
+        fsync_directory(original_path.parent)
+        maybe_inject_fault(fault_injection, f"rollback-software:restore:{label}")
+        if not binary_snapshot_matches(path, snapshot, label, max_bytes=max_bytes):
+            fail(f"{label} rollback postcondition identity mismatch")
+        return
+    if snapshot.identity is not None:
+        fail(f"{label} rollback requires the original file object")
     make_parent_directories(path)
     atomic_write(
         path,
@@ -2184,6 +2336,8 @@ def restore_software_state(
     snapshot: SoftwareStateSnapshot,
     *,
     previous_current: Path | None,
+    original_entrypoint: Path | None = None,
+    original_stamp: Path | None = None,
     fault_injection: FaultInjector | None = None,
 ) -> None:
     if previous_current is not None and (
@@ -2215,12 +2369,16 @@ def restore_software_state(
         software_entrypoint(target),
         snapshot.entrypoint,
         "OpenCode entrypoint",
+        original_path=original_entrypoint,
+        max_bytes=SOFTWARE_MAX_BYTES,
         fault_injection=fault_injection,
     )
     restore_binary_file(
         software_stamp_path(target),
         snapshot.stamp,
         SOFTWARE_STAMP_NAME,
+        original_path=original_stamp,
+        max_bytes=METADATA_MAX_BYTES,
         fault_injection=fault_injection,
     )
     if not snapshot.bin_dir_existed:
@@ -2253,8 +2411,12 @@ def assert_binary_snapshot(
             fail(f"{label} rollback postcondition expected absence")
         return
     info = require_regular_file(path, label)
+    if snapshot.identity is not None and identity_of(info) != snapshot.identity:
+        fail(f"{label} rollback postcondition identity mismatch")
     if stat.S_IMODE(info.st_mode) != snapshot.mode:
         fail(f"{label} rollback postcondition mode mismatch")
+    if info.st_mtime_ns != snapshot.mtime_ns or info.st_size != snapshot.size:
+        fail(f"{label} rollback postcondition stat mismatch")
     if read_regular_file(path, label, max_bytes=max_bytes)[0] != snapshot.content:
         fail(f"{label} rollback postcondition content mismatch")
 
@@ -2303,6 +2465,8 @@ def rollback_software_state(
     snapshot: SoftwareStateSnapshot,
     *,
     previous_current: Path | None,
+    original_entrypoint: Path | None = None,
+    original_stamp: Path | None = None,
     fault_injection: FaultInjector | None = None,
 ) -> None:
     try:
@@ -2310,10 +2474,18 @@ def rollback_software_state(
             target,
             snapshot,
             previous_current=previous_current,
+            original_entrypoint=original_entrypoint,
+            original_stamp=original_stamp,
             fault_injection=fault_injection,
         )
     except BaseException:
-        restore_software_state(target, snapshot, previous_current=previous_current)
+        restore_software_state(
+            target,
+            snapshot,
+            previous_current=previous_current,
+            original_entrypoint=original_entrypoint,
+            original_stamp=original_stamp,
+        )
 
 
 def file_sha256(path: Path, *, label: str, executable: bool = False) -> str:
@@ -2524,7 +2696,7 @@ def verify_release_metadata(data: dict[str, Any]) -> None:
     assets = {
         asset.get("name"): asset for asset in data.get("assets", []) if isinstance(asset, dict)
     }
-    for artifact in ARTIFACTS.values():
+    for artifact in (*ARTIFACTS.values(), *OBSERVED_UNSUPPORTED_ARTIFACTS.values()):
         found = assets.get(artifact["name"])
         if not found:
             fail(f"OpenCode release asset missing: {artifact['name']}")
@@ -2998,10 +3170,15 @@ def install_cli(
     artifact = (artifact_resolver or ARTIFACTS.__getitem__)(key)
     root = software_root(target)
     stage_parent = target / f".nddev-opencode-software-stage.{os.getpid()}.{time.time_ns()}"
+    undo_parent = target / f".nddev-opencode-software-undo.{os.getpid()}.{time.time_ns()}"
     stage_current = stage_parent / SOFTWARE_CURRENT_NAME
     archive = stage_parent / artifact["name"]
     previous_current = root / f".previous.{os.getpid()}.{time.time_ns()}"
     previous_current_moved = False
+    original_entrypoint = undo_parent / "entrypoint"
+    original_stamp = undo_parent / "software-stamp"
+    original_entrypoint_moved = False
+    original_stamp_moved = False
     status: dict[str, Any] | None = None
     try:
         ensure_target_private_directory(
@@ -3020,6 +3197,12 @@ def install_cli(
             target,
             (stage_current / "bin").relative_to(target).as_posix(),
             "OpenCode staged bin",
+            create=True,
+        )
+        ensure_target_private_directory(
+            target,
+            undo_parent.relative_to(target).as_posix(),
+            "OpenCode software undo",
             create=True,
         )
         artifact_downloader(artifact["url"], archive, artifact["size"])
@@ -3050,6 +3233,13 @@ def install_cli(
             executable=True,
             max_bytes=SOFTWARE_MAX_BYTES,
         )[0]
+        original_entrypoint_moved = move_software_original_to_undo(
+            software_entrypoint(target),
+            original_entrypoint,
+            "OpenCode entrypoint",
+            executable=True,
+            fault_injection=fault_injection,
+        )
         atomic_write(
             software_entrypoint(target),
             entrypoint_content,
@@ -3072,6 +3262,13 @@ def install_cli(
             target, software_stamp_path(target), SOFTWARE_STAMP_NAME, create=True
         )
         stamp_content = canonical_json(stamp)
+        original_stamp_moved = move_software_original_to_undo(
+            software_stamp_path(target),
+            original_stamp,
+            SOFTWARE_STAMP_NAME,
+            private=True,
+            fault_injection=fault_injection,
+        )
         atomic_write(
             software_stamp_path(target),
             stamp_content,
@@ -3093,12 +3290,17 @@ def install_cli(
             fail(f"installed OpenCode software is not current: {status['drift']}")
     except BaseException:
         cleanup_private_tree_required(stage_parent, "OpenCode stage")
+        if not snapshot.target_existed and not original_entrypoint_moved and not original_stamp_moved:
+            cleanup_private_tree_required(undo_parent, "OpenCode software undo")
         rollback_software_state(
             target,
             snapshot,
             previous_current=previous_current if previous_current_moved else None,
+            original_entrypoint=original_entrypoint if original_entrypoint_moved else None,
+            original_stamp=original_stamp if original_stamp_moved else None,
             fault_injection=rollback_fault_injection,
         )
+        cleanup_private_tree_required(undo_parent, "OpenCode software undo")
         raise
     try:
         cleanup_private_tree_required(
@@ -3113,13 +3315,23 @@ def install_cli(
             fault_injection=fault_injection,
             fault_point="software:cleanup-previous-current",
         )
+        cleanup_private_tree_required(
+            undo_parent,
+            "OpenCode software undo",
+            fault_injection=fault_injection,
+            fault_point="software:cleanup-undo",
+        )
     except BaseException:
         rollback_software_state(
             target,
             snapshot,
             previous_current=previous_current if previous_current_moved else None,
+            original_entrypoint=original_entrypoint if original_entrypoint_moved else None,
+            original_stamp=original_stamp if original_stamp_moved else None,
             fault_injection=rollback_fault_injection,
         )
+        cleanup_private_tree_required(stage_parent, "OpenCode stage")
+        cleanup_private_tree_required(undo_parent, "OpenCode software undo")
         raise
     return {
         "ok": True,
@@ -3450,12 +3662,18 @@ def build_parser() -> argparse.ArgumentParser:
         add_target(p)
         add_json(p)
 
-    for name in ("plan", "install", "update", "switch"):
+    for name in ("plan", "install", "switch"):
         p = sub.add_parser(name, help=f"{name} managed setup/profile")
         add_target(p)
         p.add_argument("--setup", default=CONTENT_SETUP_ID, choices=[CONTENT_SETUP_ID])
         p.add_argument("--profile", default=DEFAULT_PROFILE_ID, choices=PROFILE_IDS)
         add_json(p)
+
+    p = sub.add_parser("update", help="refresh the installed managed setup/profile")
+    add_target(p)
+    p.add_argument("--setup", choices=[CONTENT_SETUP_ID], help=argparse.SUPPRESS)
+    p.add_argument("--profile", choices=PROFILE_IDS, help=argparse.SUPPRESS)
+    add_json(p)
 
     p = sub.add_parser("migrate", help="migrate a legacy schema-1 target")
     add_target(p)
@@ -3538,16 +3756,22 @@ def main(argv: list[str] | None = None) -> int:
             payload = software_status_payload(target)
         elif command == "plan":
             payload = plan_payload(target, render_profile(args.profile))
+        elif command == "update":
+            if args.setup is not None or args.profile is not None:
+                fail("update reads the installed setup/profile; use switch to change profile")
+            profile = current_update_profile(target)
+            payload = lifecycle_noop_payload(target, profile, operation="update")
+            if payload is None:
+                with target_locks(target, create_target=False):
+                    payload = install_or_switch(
+                        target, current_update_profile(target), operation="update"
+                    )
         else:
             create_for_command = command in {"install", "install-cli"}
             with target_locks(target, create_target=create_for_command):
                 if command == "install":
                     payload = install_or_switch(
                         target, render_profile(args.profile), operation="install"
-                    )
-                elif command == "update":
-                    payload = install_or_switch(
-                        target, render_profile(args.profile), operation="update"
                     )
                 elif command == "switch":
                     payload = install_or_switch(

@@ -137,11 +137,46 @@ EXPECTED_UNSUPPORTED_PRODUCT_HOSTS = [
     "linux-musl",
     "unsupported-architecture",
 ]
+EXPECTED_PRODUCT_UNSUPPORTED_CLI_ASSETS = {
+    "windows": {
+        "windows-arm64": {
+            "id": 492338717,
+            "name": "opencode-windows-arm64.zip",
+            "size": 57687772,
+            "sha256": "3a2c5a6f246bd0fdb395b35d8cc60f1be86f7f794a22cb517d2fe8de9aa951b4",
+            "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-arm64.zip",
+            "format": "zip",
+            "product_supported": False,
+            "unsupported_category": "windows",
+        },
+        "windows-x64": {
+            "id": 492338712,
+            "name": "opencode-windows-x64.zip",
+            "size": 59527527,
+            "sha256": "85baa5de531db8d611fb5d9a62ffee00f6de69ae26e4845ec091dd2da4eb5fd1",
+            "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64.zip",
+            "format": "zip",
+            "product_supported": False,
+            "unsupported_category": "windows",
+        },
+        "windows-x64-baseline": {
+            "id": 492338711,
+            "name": "opencode-windows-x64-baseline.zip",
+            "size": 59527534,
+            "sha256": "91d1b2e0faf5210ff06ae7d1014905531dfea723ab088455e553deafdb722006",
+            "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64-baseline.zip",
+            "format": "zip",
+            "product_supported": False,
+            "unsupported_category": "windows",
+        },
+    }
+}
 EXPECTED_UPSTREAM_DISTRIBUTION_OBSERVATION = {
-    "cli_asset_families": ["darwin", "linux-glibc", "linux-musl", "x64-baseline"],
+    "cli_asset_families": ["darwin", "linux-glibc", "linux-musl", "windows", "x64-baseline"],
     "desktop_packages_excluded_from_cli_manager": [".deb", ".rpm", "AppImage"],
     "ubuntu_glibc_version_floor": None,
     "ubuntu_glibc_version_floor_note": "no-official-floor",
+    "product_unsupported_cli_assets": EXPECTED_PRODUCT_UNSUPPORTED_CLI_ASSETS,
 }
 EXPECTED_ARTIFACT_PRODUCT_HOST_MAP = {
     "darwin-arm64": {"product_host": "macos-arm64", "x64_baseline": False},
@@ -352,6 +387,16 @@ def check_release(
                 errors.append("references/opencode-baseline.json: Ubuntu/glibc floor must be null")
             if host_scope.get("ubuntu_glibc_version_floor_note") != "no-official-floor":
                 errors.append("references/opencode-baseline.json: Ubuntu/glibc floor note mismatch")
+            if (
+                host_scope.get("observed_upstream_cli_asset_families")
+                != ["darwin", "linux-glibc", "linux-musl", "windows", "x64-baseline"]
+            ):
+                errors.append("references/opencode-baseline.json: observed asset families mismatch")
+            if (
+                host_scope.get("product_unsupported_cli_assets_ref")
+                != "build/version.json:upstream_distribution_observation.product_unsupported_cli_assets"
+            ):
+                errors.append("references/opencode-baseline.json: unsupported asset ref mismatch")
 
 
 def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
@@ -388,6 +433,10 @@ def check_manifest(manifest: dict[str, Any] | None, errors: list[str]) -> None:
     expected_target_commands = expected_json_commands[1:] + ["launch"]
     if command_policy.get("target_required") != expected_target_commands:
         errors.append("build/manifest.json: canonical target command list mismatch")
+    if command_policy.get("host_precheck_before_target_resolution") != expected_target_commands:
+        errors.append("build/manifest.json: host precheck target command list mismatch")
+    if command_policy.get("setup_update_uses_installed_identity") is not True:
+        errors.append("build/manifest.json: setup update must use installed identity")
     if command_policy.get("read_only_commands_create_locks") is not False:
         errors.append("build/manifest.json: read-only commands must not create locks")
     if command_policy.get("noop_plan_empty_changes") is not True:
@@ -545,8 +594,30 @@ def check_contract(contract: dict[str, Any] | None, errors: list[str]) -> None:
     setup = contract.get("setup_system") or {}
     if setup.get("setup_ids") != SETUP_IDS or setup.get("profile_ids") != PROFILE_IDS:
         errors.append("config/nddev-contract.json: setup/profile ids mismatch")
-    if " update " not in f" {setup.get('update_command', '')} ":
-        errors.append("config/nddev-contract.json: setup update_command required")
+    if (
+        setup.get("update_command")
+        != "python3 cli-tools/nddev_opencode.py update --target <absolute-target> [--json]"
+    ):
+        errors.append("config/nddev-contract.json: target-only setup update_command required")
+    expected_target_commands = [
+        "status",
+        "plan",
+        "install",
+        "update",
+        "switch",
+        "migrate",
+        "restore",
+        "remove",
+        "software-status",
+        "install-cli",
+        "update-cli",
+        "remove-cli",
+        "launch",
+    ]
+    if setup.get("host_precheck_before_target_resolution") != expected_target_commands:
+        errors.append("config/nddev-contract.json: host precheck target command list mismatch")
+    if setup.get("update_uses_installed_identity") is not True:
+        errors.append("config/nddev-contract.json: setup update must use installed identity")
     if setup.get("read_only_commands_create_locks") is not False:
         errors.append("config/nddev-contract.json: read-only commands must not create locks")
     if setup.get("noop_plan_empty_changes") is not True:
@@ -1457,6 +1528,7 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
             errors.append("no-op plan: expected changed=false and empty changes")
         repeat_install = manager.install_or_switch(target, profile, operation="install")
         repeat_switch = manager.install_or_switch(target, profile, operation="switch")
+        repeat_update = manager.install_or_switch(target, profile, operation="update")
         if (
             repeat_install.get("changed") is not False
             or repeat_install.get("changes") != []
@@ -1469,12 +1541,67 @@ def check_noop_and_backup_smokes(manager: Any, errors: list[str]) -> None:
             or repeat_switch.get("backup") is not None
         ):
             errors.append("no-op switch: expected no backup/write")
+        if (
+            repeat_update.get("changed") is not False
+            or repeat_update.get("changes") != []
+            or repeat_update.get("backup") is not None
+        ):
+            errors.append("no-op update: expected no backup/write")
         if backup_slot_count(manager, target) != count:
-            errors.append("no-op install/switch changed backup count")
+            errors.append("no-op install/switch/update changed backup count")
         if identity_mtime_signature(manager, target) != before_identity:
-            errors.append("no-op install/switch changed target inode/mtime/content")
+            errors.append("no-op install/switch/update changed target inode/mtime/content")
         if path_signature(manager, manager.backup_root(target)) != before_backup:
-            errors.append("no-op install/switch changed backup pool")
+            errors.append("no-op install/switch/update changed backup pool")
+
+    with tempfile.TemporaryDirectory(prefix="nddev-opencode-cli-update-noop-") as raw:
+        target = Path(raw).resolve(strict=False) / "target"
+        manager.install_or_switch(target, manager.render_profile("safe"), operation="install")
+        before_identity = identity_mtime_signature(manager, target)
+        before_backup = path_signature(manager, manager.backup_root(target))
+        original_detect = manager.detect_supported_host
+        manager.detect_supported_host = fake_host
+        try:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                rc = manager.main(["update", "--target", str(target), "--json"])
+            if rc != 0:
+                errors.append(f"CLI target-only update returned {rc}")
+            else:
+                payload = json.loads(stdout.getvalue())
+                if payload.get("changed") is not False or payload.get("profile_id") != "safe":
+                    errors.append("CLI target-only update did not preserve safe no-op identity")
+        finally:
+            manager.detect_supported_host = original_detect
+        stamp = manager.load_stamp(target)
+        if stamp is None or stamp.get("profile_id") != "safe":
+            errors.append("CLI target-only update changed installed profile")
+        if identity_mtime_signature(manager, target) != before_identity:
+            errors.append("CLI target-only update changed target inode/mtime/content")
+        if path_signature(manager, manager.backup_root(target)) != before_backup:
+            errors.append("CLI target-only update changed backup pool")
+
+        original_detect = manager.detect_supported_host
+        manager.detect_supported_host = fake_host
+        try:
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                rc = manager.main(
+                    [
+                        "update",
+                        "--target",
+                        str(target),
+                        "--profile",
+                        "full-auto",
+                        "--json",
+                    ]
+                )
+            if rc != 2:
+                errors.append("CLI update with selection flags must be rejected")
+        finally:
+            manager.detect_supported_host = original_detect
+        if manager.load_stamp(target).get("profile_id") != "safe":
+            errors.append("CLI update with selection flags changed installed profile")
 
 
 def write_manual_backup(
@@ -2125,7 +2252,15 @@ def check_platform_preflight_smokes(manager: Any, errors: list[str]) -> None:
                 raise manager.ManagerError("target_locks should not run")
 
             commands = [
+                ["status", "--target", str(target), "--json"],
                 ["software-status", "--target", str(target), "--json"],
+                ["plan", "--target", str(target), "--json"],
+                ["install", "--target", str(target), "--json"],
+                ["update", "--target", str(target), "--json"],
+                ["switch", "--target", str(target), "--json"],
+                ["migrate", "--target", str(target), "--json"],
+                ["restore", "--target", str(target), "--backup", "0", "--json"],
+                ["remove", "--target", str(target), "--json"],
                 ["remove-cli", "--target", str(target), "--json"],
                 ["install-cli", "--target", str(target), "--json"],
                 ["update-cli", "--target", str(target), "--json"],
@@ -2242,18 +2377,10 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
     for rollback_point in (
         "rollback-software:remove-new-current",
         "rollback-software:restore-previous-current",
-        "atomic:rollback-software:OpenCode entrypoint:temp-write",
-        "atomic:rollback-software:OpenCode entrypoint:chmod",
-        "atomic:rollback-software:OpenCode entrypoint:file-fsync",
-        "atomic:rollback-software:OpenCode entrypoint:replace",
-        "atomic:rollback-software:OpenCode entrypoint:parent-fsync",
-        "atomic:rollback-software:OpenCode entrypoint:postcondition",
-        "atomic:rollback-software:NDDEV-OPENCODE-SOFTWARE.json:temp-write",
-        "atomic:rollback-software:NDDEV-OPENCODE-SOFTWARE.json:chmod",
-        "atomic:rollback-software:NDDEV-OPENCODE-SOFTWARE.json:file-fsync",
-        "atomic:rollback-software:NDDEV-OPENCODE-SOFTWARE.json:replace",
-        "atomic:rollback-software:NDDEV-OPENCODE-SOFTWARE.json:parent-fsync",
-        "atomic:rollback-software:NDDEV-OPENCODE-SOFTWARE.json:postcondition",
+        "rollback-software:remove-new:OpenCode entrypoint",
+        "rollback-software:restore:OpenCode entrypoint",
+        f"rollback-software:remove-new:{manager.SOFTWARE_STAMP_NAME}",
+        f"rollback-software:restore:{manager.SOFTWARE_STAMP_NAME}",
         "rollback-software:postcondition",
     ):
         with tempfile.TemporaryDirectory(prefix="nddev-opencode-software-rollback-fault-") as raw:
@@ -2261,6 +2388,7 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
             target = make_private_dir(root / "target")
             seed_current_software(manager, target, current=False)
             before = state_bundle_signature(manager, root, target)
+            before_identity = software_identity_signature(manager, target)
             fault, seen = one_shot_fault(manager, "software:stamp")
             rollback_fault, rollback_seen = one_shot_fault(manager, rollback_point)
             expect_manager_error(
@@ -2281,6 +2409,10 @@ def check_software_transaction_smokes(manager: Any, errors: list[str]) -> None:
             if state_bundle_signature(manager, root, target) != before:
                 errors.append(
                     f"software rollback fault {rollback_point}: state changed after retry"
+                )
+            if software_identity_signature(manager, target) != before_identity:
+                errors.append(
+                    f"software rollback fault {rollback_point}: identity changed after retry"
                 )
 
     for rollback_point in (

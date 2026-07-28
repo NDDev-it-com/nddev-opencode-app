@@ -48,13 +48,15 @@
       "darwin",
       "linux-glibc",
       "linux-musl",
+      "windows",
       "x64-baseline"
     ],
     "desktop_packages_excluded_from_cli_manager": [
       ".deb",
       ".rpm",
       "AppImage"
-    ]
+    ],
+    "product_unsupported_cli_assets_ref": "build/version.json:upstream_distribution_observation.product_unsupported_cli_assets"
   },
   "npm_observation": {
     "package": "opencode-ai",

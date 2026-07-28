@@ -79,12 +79,28 @@
       "remove-cli",
       "launch"
     ],
+    "host_precheck_before_target_resolution": [
+      "status",
+      "plan",
+      "install",
+      "update",
+      "switch",
+      "migrate",
+      "restore",
+      "remove",
+      "software-status",
+      "install-cli",
+      "update-cli",
+      "remove-cli",
+      "launch"
+    ],
     "plan_mutates": false,
     "read_only_commands_create_locks": false,
     "restore_backup_option": "--backup <0..9>",
     "status_executes_binary": false,
     "noop_plan_empty_changes": true,
-    "noop_mutation_writes_backup": false
+    "noop_mutation_writes_backup": false,
+    "setup_update_uses_installed_identity": true
   },
   "runtime_launch": {
     "manager_command": "python3 cli-tools/nddev_opencode.py launch --target <absolute-target> -- [args...]",

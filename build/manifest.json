@@ -1,20 +1,31 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "nddev-opencode-app",
-  "build_version": "0.1.0",
+  "build_version": "0.2.0",
   "entrypoint": "python3 cli-tools/nddev_opencode.py",
-  "source_root": "setups",
+  "source_roots": {
+    "setups": "setups",
+    "profiles": "profiles"
+  },
   "setup_ids": [
-    "safe",
-    "balanced",
-    "full-auto"
+    "nddev-builder"
   ],
+  "profile_ids": [
+    "full-auto",
+    "safe"
+  ],
+  "default_setup": "nddev-builder",
+  "default_profile": "full-auto",
   "managed_files": [
     "opencode.json",
     "AGENTS.md",
     "plugins/nddev-builder.js",
     "skills/nddev-builder/SKILL.md",
+    "skills/nddev-builder/references/native-surfaces.md",
+    "skills/nddev-builder/references/security-boundary.md",
     "agents/nddev-builder.md",
+    "commands/nddev-orient.md",
+    "commands/nddev-validate.md",
     "NDDEV-OPENCODE-SETUP.json",
     "NDDEV-OPENCODE-SOFTWARE.json"
   ],
@@ -24,12 +35,17 @@
     "native_surfaces": [
       "plugins",
       "skills",
-      "agents"
+      "agents",
+      "commands"
     ],
     "managed_files": [
       "plugins/nddev-builder.js",
       "skills/nddev-builder/SKILL.md",
-      "agents/nddev-builder.md"
+      "skills/nddev-builder/references/native-surfaces.md",
+      "skills/nddev-builder/references/security-boundary.md",
+      "agents/nddev-builder.md",
+      "commands/nddev-orient.md",
+      "commands/nddev-validate.md"
     ]
   },
   "command_policy": {
@@ -38,94 +54,185 @@
       "status",
       "plan",
       "install",
-      "apply",
+      "update",
       "switch",
-      "restore",
-      "remove",
-      "software-status",
-      "install-cli",
-      "update-cli"
-    ],
-    "target_required": [
-      "status",
-      "plan",
-      "install",
-      "apply",
-      "switch",
+      "migrate",
       "restore",
       "remove",
       "software-status",
       "install-cli",
       "update-cli",
+      "remove-cli"
+    ],
+    "target_required": [
+      "status",
+      "plan",
+      "install",
+      "update",
+      "switch",
+      "migrate",
+      "restore",
+      "remove",
+      "software-status",
+      "install-cli",
+      "update-cli",
+      "remove-cli",
+      "launch"
+    ],
+    "host_precheck_before_target_resolution": [
+      "status",
+      "plan",
+      "install",
+      "update",
+      "switch",
+      "migrate",
+      "restore",
+      "remove",
+      "software-status",
+      "install-cli",
+      "update-cli",
+      "remove-cli",
       "launch"
     ],
     "plan_mutates": false,
-    "restore_backup_option": "--backup <0..9>"
+    "read_only_commands_create_product_anchor": false,
+    "read_only_commands_create_target_anchor": false,
+    "monotonic_product_anchor": true,
+    "monotonic_canonical_target_anchor": true,
+    "anchor_publication": "atomic-durable-no-replace",
+    "cleanup_pending_read_only_mutates": false,
+    "cleanup_pending_top_level": true,
+    "launch_drains_cleanup_before_runtime": true,
+    "cleanup_journal": {
+      "schema": 1,
+      "parent": ".nddev-opencode-cleanup-pending",
+      "file": "NDDEV-OPENCODE-CLEANUP.json",
+      "publication": "atomic-durable-no-replace",
+      "hardlink_alias_recovery": "mutation-only",
+      "max_entries": 8,
+      "max_objects": 512,
+      "serialized_max_bytes": 1048576,
+      "pre_move_recovery_intent": "durable-before-first-source-move",
+      "drain_identity": "full-before-first-destructive-step-partial-resume-bottom-up",
+      "status_plan_expose_paths": false,
+      "mutation_drains_before_active_changes": true
+    },
+    "restore_backup_option": "--backup <0..9>",
+    "status_executes_binary": false,
+    "noop_plan_empty_changes": true,
+    "noop_mutation_writes_backup": false,
+    "setup_update_uses_installed_identity": true
   },
   "runtime_launch": {
     "manager_command": "python3 cli-tools/nddev_opencode.py launch --target <absolute-target> -- [args...]",
     "direct_command": "<absolute-target>/bin/opencode [args...]",
-    "environment_variables": [
-      "OPENCODE_CONFIG",
-      "OPENCODE_CONFIG_DIR",
-      "HOME",
-      "XDG_CONFIG_HOME",
-      "XDG_DATA_HOME",
-      "XDG_STATE_HOME",
-      "XDG_CACHE_HOME"
-    ],
     "target_environment_scope": "child-process-only",
     "requires_clean_managed_target": true,
     "requires_current_target_owned_software": true,
     "forwards_arguments": true,
-    "forwards_child_exit_code": true
+    "forwards_child_exit_code": true,
+    "locks_held_through_child": true,
+    "runtime_dirs_real_private": true,
+    "reject_runtime_dir_symlink": true,
+    "lock_file_policy": {
+      "parent_real_private": true,
+      "open_no_follow": true,
+      "identity_revalidated": true,
+      "mode": "0600",
+      "nlink": 1,
+      "anchor_binding": "json-marker",
+      "anchor_publication_no_replace": true,
+      "anchor_monotonic_after_final_path_publication": true,
+      "anchor_hardlink_alias_recovery": true,
+      "unknown_hardlink_aliases_fail_closed": true
+    },
+    "forced_environment": {
+      "OPENCODE_CONFIG": "<target>/opencode.json",
+      "OPENCODE_CONFIG_DIR": "<target>",
+      "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+      "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
+      "OPENCODE_DISABLE_CLAUDE_CODE": "1",
+      "OPENCODE_DISABLE_SHARE": "1"
+    },
+    "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
+    "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
+    "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
+    "host_check_before_target_inspection": true,
+    "host_check_before_runtime": true
   },
   "software_lifecycle": {
     "stamp_file": "NDDEV-OPENCODE-SOFTWARE.json",
-    "stamp_schema": 1,
+    "stamp_schema": 2,
     "status_command": "python3 cli-tools/nddev_opencode.py software-status --target <absolute-target> --json",
     "install_command": "python3 cli-tools/nddev_opencode.py install-cli --target <absolute-target> --json",
     "update_command": "python3 cli-tools/nddev_opencode.py update-cli --target <absolute-target> --json",
-    "package_manager": "bun",
-    "install_argv": [
-      "add",
-      "--global",
-      "--exact",
-      "--trust",
-      "opencode-ai@1.18.6"
-    ],
-    "trust_required": true,
-    "trust_reason": "Official opencode-ai@1.18.6 declares postinstall=node ./postinstall.mjs and platform optional packages",
+    "remove_command": "python3 cli-tools/nddev_opencode.py remove-cli --target <absolute-target> --json",
+    "install_channel": "official-github-release-asset",
     "target_owned": true,
     "software_root": ".nddev-opencode-software/current",
     "entrypoint": "bin/opencode",
-    "entrypoint_kind": "bun-native-bin",
-    "persisted_stage_paths": [
-      "install/global",
-      "bin"
-    ],
-    "ephemeral_stage_paths": [
-      "home",
-      "xdg-config",
-      "cache",
-      "tmp"
-    ],
+    "entrypoint_kind": "official-single-binary",
     "status_executes_binary": false,
+    "download_policy": {
+      "content_length_required": true,
+      "bounded_chunked_read": true,
+      "fail_on_short_or_long_body": true
+    },
+    "transaction_rollback": {
+      "fresh_install": true,
+      "update": true,
+      "remove": true,
+      "restores_current_entrypoint_stamp_and_absence": true,
+      "rollback_fault_retry": true,
+      "final_cleanup_required": true,
+      "cleanup_retry": true,
+      "cleanup_pending_journal": true
+    },
     "staged_version_probe": [
       "bin/opencode",
       "--version"
     ],
-    "registry": {
-      "integrity": "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w==",
-      "shasum": "de8f32d2328a3f07891f263ce7f2b6f790324e13"
-    },
     "credential_inheritance": false,
-    "rollback_on_swap_failure": true
+    "rollback_on_swap_failure": true,
+    "artifact_ref": "build/version.json:artifacts",
+    "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
+    "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
+    "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
+    "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
+    "host_check_before_network": true,
+    "host_check_before_stage": true,
+    "host_check_before_target_inspection": true
   },
   "backup_policy": {
     "location": "sibling .<target-name>.nddev-opencode-backups",
     "envelope": "NDDEV-OPENCODE-BACKUP.json",
+    "envelope_schema": 3,
     "slots": 10,
-    "canonical_target_bound": true
+    "canonical_target_bound": true,
+    "known_current_and_legacy_managed_absence_is_restored": true,
+    "envelope_exact_keys": true,
+    "files_exact_known_paths": true,
+    "sizes_exact_present_files": true,
+    "digests_exact_present_files": true,
+    "restore_transaction_rollback": true,
+    "transactional_slot_replacement": true,
+    "rollback_preserves_object_graph_identity": true,
+    "failed_mutation_writes_backup": false,
+    "rollback_fault_retry": true,
+    "final_cleanup_required": true,
+    "cleanup_retry": true,
+    "cleanup_pending_journal": true
+  },
+  "atomic_write_policy": {
+    "order": [
+      "temp-write",
+      "chmod",
+      "file-fsync",
+      "replace",
+      "parent-fsync",
+      "postcondition"
+    ],
+    "fsync_errors_fail_closed": true,
+    "post_replace_failure_rolls_back": true
   }
 }

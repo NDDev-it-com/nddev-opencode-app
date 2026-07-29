@@ -2,10 +2,23 @@
 
 ## Unreleased
 
-- Add the `balanced` setup for reviewed changes between the read-first and
-  fully autonomous permission profiles.
-- Update the target-owned OpenCode runtime pin to 1.18.6.
-- Bound Bun installation and staged version probing independently.
+- Restructure OpenCode setup ownership into the `nddev-builder` content setup
+  plus `full-auto` and `safe` runtime profiles.
+- Pin OpenCode to the official immutable GitHub release asset contract owned by
+  `build/version.json`.
+- Replace Bun/npm installation with exact release asset verification and safe
+  single-binary extraction.
+- Add schema-2 setup and software stamps, canonical `update`, `migrate`, and
+  `remove-cli`.
+- Hold external and internal persistent locks through launched OpenCode child
+  processes.
+- Force source-used OpenCode runtime flags for target-only config, disabled
+  project config, disabled external skills/Claude compatibility, and disabled
+  sharing.
+- Scope CLI installation and launch to macOS plus Ubuntu desktop/server, with
+  the exact host contract owned by `build/version.json`.
+- Add native command/reference projection files and a CLAUDE bridge to the
+  canonical `AGENTS.md`.
 
 ## 0.1.0
 

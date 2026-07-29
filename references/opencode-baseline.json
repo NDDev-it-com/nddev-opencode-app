@@ -1,51 +1,103 @@
 {
-  "schema_version": 1,
-  "verified_date": "2026-07-27",
-  "verified_version_ref": "build/version.json:opencode_tested",
+  "schema_version": 2,
+  "verified_date": "2026-07-28",
+  "verified_version_ref": "build/version.json:opencode_version",
   "runtime": {
     "product": "OpenCode",
     "command": "opencode",
-    "package_ref": "build/version.json:opencode_package",
-    "tested_version_ref": "build/version.json:opencode_tested",
+    "tested_version_ref": "build/version.json:opencode_version",
     "minimum_version_ref": "build/version.json:opencode_min"
   },
   "release": {
-    "npm_package": "opencode-ai",
-    "npm_version": "1.18.6",
-    "github_release": "https://github.com/anomalyco/opencode/releases/tag/v1.18.6",
-    "published_at": "2026-07-27T02:47:44Z",
-    "bin": {
-      "opencode": "bin/opencode.exe"
-    },
-    "scripts": {
-      "postinstall": "node ./postinstall.mjs"
-    },
-    "dist": {
-      "integrity": "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w==",
-      "shasum": "de8f32d2328a3f07891f263ce7f2b6f790324e13"
-    },
-    "optional_platform_packages": true
+    "github_release": "https://github.com/anomalyco/opencode/releases/tag/v1.18.8",
+    "github_release_api": "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.8",
+    "tag": "v1.18.8",
+    "release_id": 360858647,
+    "immutable": true,
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-07-28T06:07:54Z",
+    "tag_ref": "3c81a5d1ddceab377d9ad71c14899e6935333fdd",
+    "target_commitish": "484f00ebf44fbb9ec938b2155dad42c34fc5a7a7",
+    "cli_signature": null,
+    "cli_signature_note": "Official CLI zip/tar assets expose GitHub release asset SHA-256 digests but no PGP/cosign signature was published for the CLI assets."
+  },
+  "artifacts_ref": "build/version.json:artifacts",
+  "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
+  "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
+  "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
+  "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
+  "product_host_scope": {
+    "supported": [
+      "macos-arm64",
+      "macos-x64",
+      "ubuntu-glibc-arm64",
+      "ubuntu-glibc-x64"
+    ],
+    "unsupported": [
+      "windows",
+      "non-ubuntu-linux",
+      "linux-musl",
+      "unsupported-architecture"
+    ],
+    "linux_distribution_metadata": "platform.freedesktop_os_release",
+    "ubuntu_glibc_version_floor": null,
+    "ubuntu_glibc_version_floor_note": "no-official-floor",
+    "linux_vendor_artifact_names": "The upstream CLI release assets retain vendor names such as linux-x64 and linux-x64-baseline; nddev-opencode-app maps the glibc Linux artifacts only after the host is verified as ID=ubuntu and glibc.",
+    "observed_upstream_cli_asset_families": [
+      "darwin",
+      "linux-glibc",
+      "linux-musl",
+      "windows",
+      "x64-baseline"
+    ],
+    "desktop_packages_excluded_from_cli_manager": [
+      ".deb",
+      ".rpm",
+      "AppImage"
+    ],
+    "product_unsupported_cli_assets_ref": "build/version.json:upstream_distribution_observation.product_unsupported_cli_assets"
+  },
+  "npm_observation": {
+    "package": "opencode-ai",
+    "version": "1.18.8",
+    "integrity": "sha512-eZvYK0rIc/NUDQ+s3LsO9gyUU3MswsbNOLZz06iPwVhbg/2jF6bkTaroBgiIdFWKwUn5sj+kSMc4TBYxFkMrNQ==",
+    "shasum": "3e9ea464402a8601ca85390d86b31b82e227a4ae",
+    "used_by_nddev_install": false
   },
   "official_sources": {
     "repository": "https://github.com/anomalyco/opencode",
     "homepage": "https://opencode.ai/",
+    "install_docs": "https://opencode.ai/docs/",
     "config_docs": "https://opencode.ai/docs/config/",
     "permissions_docs": "https://opencode.ai/docs/permissions/",
+    "rules_docs": "https://opencode.ai/docs/rules/",
     "plugins_docs": "https://opencode.ai/docs/plugins/",
     "skills_docs": "https://opencode.ai/docs/skills/",
     "agents_docs": "https://opencode.ai/docs/agents/",
-    "npm_package": "https://www.npmjs.com/package/opencode-ai"
+    "commands_docs": "https://opencode.ai/docs/commands/",
+    "tools_docs": "https://opencode.ai/docs/tools/",
+    "mcp_docs": "https://opencode.ai/docs/mcp-servers/",
+    "cli_docs": "https://opencode.ai/docs/cli/",
+    "npm_package": "https://registry.npmjs.org/opencode-ai/latest"
   },
   "configuration": {
-    "global_config": "~/.config/opencode/opencode.json",
+    "config_file": "opencode.json",
     "custom_config_env": "OPENCODE_CONFIG",
     "custom_config_dir_env": "OPENCODE_CONFIG_DIR",
-    "config_file": "opencode.json",
-    "global_config_dir": "~/.config/opencode",
+    "config_content_env": "OPENCODE_CONFIG_CONTENT",
+    "project_config_disable_env": "OPENCODE_DISABLE_PROJECT_CONFIG",
+    "share_disable_env": "OPENCODE_DISABLE_SHARE",
+    "external_skills_disable_env": "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+    "claude_compat_disable_env": "OPENCODE_DISABLE_CLAUDE_CODE",
     "native_builder_projection": [
       "plugins/nddev-builder.js",
       "skills/nddev-builder/SKILL.md",
-      "agents/nddev-builder.md"
+      "skills/nddev-builder/references/native-surfaces.md",
+      "skills/nddev-builder/references/security-boundary.md",
+      "agents/nddev-builder.md",
+      "commands/nddev-orient.md",
+      "commands/nddev-validate.md"
     ],
     "marketplace": null
   },
@@ -56,6 +108,15 @@
       "allow",
       "ask",
       "deny"
-    ]
-  }
+    ],
+    "full_auto_shape": {
+      "permission": "allow"
+    }
+  },
+  "source_verified_runtime_flags": [
+    "OPENCODE_DISABLE_PROJECT_CONFIG",
+    "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+    "OPENCODE_DISABLE_CLAUDE_CODE",
+    "OPENCODE_DISABLE_SHARE"
+  ]
 }

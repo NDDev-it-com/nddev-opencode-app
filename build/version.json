@@ -1,12 +1,237 @@
 {
-  "schema_version": 1,
-  "build_version": "0.1.0",
-  "opencode_package": "opencode-ai",
-  "opencode_tested": "1.18.6",
+  "schema_version": 2,
+  "build_version": "0.2.0",
+  "opencode_product": "OpenCode",
+  "opencode_version": "1.18.8",
   "opencode_min": "1.1.1",
   "opencode_command": "opencode",
-  "opencode_registry_integrity": "sha512-MKombYcQfUlBFa6bo5ikev4nPcmHo4rI8q8KWfqFZFmNNqEutaXFYJKQHiUKE6nPOXcTI7T4sK7hicEYwL3S1w==",
-  "opencode_registry_shasum": "de8f32d2328a3f07891f263ce7f2b6f790324e13",
-  "python_requires": ">=3.10",
+  "official_repository": "https://github.com/anomalyco/opencode",
+  "release": {
+    "tag": "v1.18.8",
+    "id": 360858647,
+    "immutable": true,
+    "tag_ref": "3c81a5d1ddceab377d9ad71c14899e6935333fdd",
+    "target_commitish": "484f00ebf44fbb9ec938b2155dad42c34fc5a7a7",
+    "published_at": "2026-07-28T06:07:54Z",
+    "api": "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.8"
+  },
+  "supported_product_hosts": {
+    "macos-arm64": {
+      "system": "darwin",
+      "architecture": "arm64",
+      "artifact_platforms": [
+        "darwin-arm64"
+      ]
+    },
+    "macos-x64": {
+      "system": "darwin",
+      "architecture": "x64",
+      "x64_baseline_selection": "x64 host without AVX2",
+      "artifact_platforms": [
+        "darwin-x64",
+        "darwin-x64-baseline"
+      ]
+    },
+    "ubuntu-glibc-arm64": {
+      "system": "linux",
+      "distribution_id": "ubuntu",
+      "distribution_metadata_source": "platform.freedesktop_os_release",
+      "variants": [
+        "desktop",
+        "server"
+      ],
+      "libc": "glibc",
+      "official_distribution_version_floor": null,
+      "official_distribution_version_floor_note": "no-official-floor",
+      "architecture": "arm64",
+      "artifact_platforms": [
+        "linux-arm64"
+      ]
+    },
+    "ubuntu-glibc-x64": {
+      "system": "linux",
+      "distribution_id": "ubuntu",
+      "distribution_metadata_source": "platform.freedesktop_os_release",
+      "variants": [
+        "desktop",
+        "server"
+      ],
+      "libc": "glibc",
+      "official_distribution_version_floor": null,
+      "official_distribution_version_floor_note": "no-official-floor",
+      "architecture": "x64",
+      "x64_baseline_selection": "x64 host without AVX2",
+      "artifact_platforms": [
+        "linux-x64",
+        "linux-x64-baseline"
+      ]
+    }
+  },
+  "unsupported_product_hosts": [
+    "windows",
+    "non-ubuntu-linux",
+    "linux-musl",
+    "unsupported-architecture"
+  ],
+  "upstream_distribution_observation": {
+    "cli_asset_families": [
+      "darwin",
+      "linux-glibc",
+      "linux-musl",
+      "windows",
+      "x64-baseline"
+    ],
+    "desktop_packages_excluded_from_cli_manager": [
+      ".deb",
+      ".rpm",
+      "AppImage"
+    ],
+    "ubuntu_glibc_version_floor": null,
+    "ubuntu_glibc_version_floor_note": "no-official-floor",
+    "product_unsupported_cli_assets": {
+      "windows": {
+        "windows-arm64": {
+          "id": 492338717,
+          "name": "opencode-windows-arm64.zip",
+          "size": 57687772,
+          "sha256": "3a2c5a6f246bd0fdb395b35d8cc60f1be86f7f794a22cb517d2fe8de9aa951b4",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-arm64.zip",
+          "format": "zip",
+          "product_supported": false,
+          "unsupported_category": "windows"
+        },
+        "windows-x64": {
+          "id": 492338712,
+          "name": "opencode-windows-x64.zip",
+          "size": 59527527,
+          "sha256": "85baa5de531db8d611fb5d9a62ffee00f6de69ae26e4845ec091dd2da4eb5fd1",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64.zip",
+          "format": "zip",
+          "product_supported": false,
+          "unsupported_category": "windows"
+        },
+        "windows-x64-baseline": {
+          "id": 492338711,
+          "name": "opencode-windows-x64-baseline.zip",
+          "size": 59527534,
+          "sha256": "91d1b2e0faf5210ff06ae7d1014905531dfea723ab088455e553deafdb722006",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64-baseline.zip",
+          "format": "zip",
+          "product_supported": false,
+          "unsupported_category": "windows"
+        }
+      },
+      "linux-musl": {
+        "linux-arm64-musl": {
+          "id": 492336443,
+          "name": "opencode-linux-arm64-musl.tar.gz",
+          "size": 61339081,
+          "sha256": "c44352641abb0657f16d110b898772b69cb6ea0a5aad683c84e393e73e4543d6",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64-musl.tar.gz",
+          "format": "tar.gz",
+          "product_supported": false,
+          "unsupported_category": "linux-musl"
+        },
+        "linux-x64-baseline-musl": {
+          "id": 492336400,
+          "name": "opencode-linux-x64-baseline-musl.tar.gz",
+          "size": 61767670,
+          "sha256": "56828e3e68f34c686a41d01b37b7a64166e5f7ad5889fe2164a2a2b9ea563ee0",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline-musl.tar.gz",
+          "format": "tar.gz",
+          "product_supported": false,
+          "unsupported_category": "linux-musl"
+        },
+        "linux-x64-musl": {
+          "id": 492336437,
+          "name": "opencode-linux-x64-musl.tar.gz",
+          "size": 61767670,
+          "sha256": "7e7a991aff33ae330308e88bfa8e6a5ea4125b468f4de6657b93d76200897a41",
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-musl.tar.gz",
+          "format": "tar.gz",
+          "product_supported": false,
+          "unsupported_category": "linux-musl"
+        }
+      }
+    }
+  },
+  "artifact_product_host_map": {
+    "darwin-arm64": {
+      "product_host": "macos-arm64",
+      "x64_baseline": false
+    },
+    "darwin-x64": {
+      "product_host": "macos-x64",
+      "x64_baseline": false
+    },
+    "darwin-x64-baseline": {
+      "product_host": "macos-x64",
+      "x64_baseline": true
+    },
+    "linux-arm64": {
+      "product_host": "ubuntu-glibc-arm64",
+      "x64_baseline": false
+    },
+    "linux-x64": {
+      "product_host": "ubuntu-glibc-x64",
+      "x64_baseline": false
+    },
+    "linux-x64-baseline": {
+      "product_host": "ubuntu-glibc-x64",
+      "x64_baseline": true
+    }
+  },
+  "artifacts": {
+    "darwin-arm64": {
+      "id": 492336314,
+      "name": "opencode-darwin-arm64.zip",
+      "size": 45041487,
+      "sha256": "0fb2e11a819dd97949f0f7e0348e0e0c4fd8c42b3a5ed7aee1f0d437c94b9f0c",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-arm64.zip"
+    },
+    "darwin-x64": {
+      "id": 492336313,
+      "name": "opencode-darwin-x64.zip",
+      "size": 47279642,
+      "sha256": "0193ed3f295bb93f073ae0e8fa0737e9b31f167464761901589401fd278d4cc4",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-x64.zip"
+    },
+    "darwin-x64-baseline": {
+      "id": 492336312,
+      "name": "opencode-darwin-x64-baseline.zip",
+      "size": 47279642,
+      "sha256": "16702f945bc94340c2bda3345ea936ef7927226a333f175b864ae253d9fc351e",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-darwin-x64-baseline.zip"
+    },
+    "linux-arm64": {
+      "id": 492336388,
+      "name": "opencode-linux-arm64.tar.gz",
+      "size": 59208626,
+      "sha256": "3e1b4f3bd12764c911f9211910608f85429b6209900a662c7ed27196c9033b93",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64.tar.gz"
+    },
+    "linux-x64": {
+      "id": 492336385,
+      "name": "opencode-linux-x64.tar.gz",
+      "size": 59404172,
+      "sha256": "b72014b8b53427fdb5a628d2433569ee7ccd289bd5c4490636064b24791c1305",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64.tar.gz"
+    },
+    "linux-x64-baseline": {
+      "id": 492336397,
+      "name": "opencode-linux-x64-baseline.tar.gz",
+      "size": 59404173,
+      "sha256": "132b605fe6081e1daf1a59a43a83125db86864d59feb9c68320fafbe0cb0bdb1",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline.tar.gz"
+    }
+  },
+  "npm_observation": {
+    "package": "opencode-ai",
+    "version": "1.18.8",
+    "integrity": "sha512-eZvYK0rIc/NUDQ+s3LsO9gyUU3MswsbNOLZz06iPwVhbg/2jF6bkTaroBgiIdFWKwUn5sj+kSMc4TBYxFkMrNQ==",
+    "shasum": "3e9ea464402a8601ca85390d86b31b82e227a4ae",
+    "install_channel": "not-used-by-nddev-0.2.0"
+  },
+  "python_requires": ">=3.9",
   "runtime_baseline_ref": "references/opencode-baseline.json"
 }

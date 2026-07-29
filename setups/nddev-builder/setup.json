@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "id": "nddev-builder",
+  "description": "OpenCode-native NDDev builder projection using local plugins, skills, agents, and commands.",
+  "content_files": [
+    "AGENTS.md",
+    "plugins/nddev-builder.js",
+    "skills/nddev-builder/SKILL.md",
+    "skills/nddev-builder/references/native-surfaces.md",
+    "skills/nddev-builder/references/security-boundary.md",
+    "agents/nddev-builder.md",
+    "commands/nddev-orient.md",
+    "commands/nddev-validate.md"
+  ],
+  "builder_enabled": true
+}

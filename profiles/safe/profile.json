@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "id": "safe",
+  "description": "Optional reviewed profile that denies edits, gates shell and external access, and keeps nddev-builder available.",
+  "default": false,
+  "managed_config_keys": [
+    "autoupdate",
+    "share",
+    "permission"
+  ]
+}

@@ -215,9 +215,7 @@ def check_baseline(
     if baseline.get("schema_version") != 2:
         errors.append("references/opencode-baseline.json: schema_version must be 2")
     if "verified_date" in baseline:
-        errors.append(
-            "references/opencode-baseline.json: observation-only verified_date forbidden"
-        )
+        errors.append("references/opencode-baseline.json: observation-only verified_date forbidden")
     if resolve_ref(version, baseline.get("verified_version_ref")) != runtime:
         errors.append("references/opencode-baseline.json: verified_version_ref mismatch")
     runtime_contract = baseline.get("runtime")

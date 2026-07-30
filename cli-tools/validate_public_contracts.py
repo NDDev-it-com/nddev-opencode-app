@@ -191,7 +191,6 @@ def check_baseline(
         "artifact_product_host_map_ref": host_map,
         "supported_product_hosts_ref": version.get("supported_product_hosts"),
         "unsupported_product_hosts_ref": version.get("unsupported_product_hosts"),
-        "upstream_distribution_observation_ref": version.get("upstream_distribution_observation"),
     }
     for key, expected in reference_values.items():
         if resolve_ref(version, baseline.get(key)) != expected:
@@ -206,16 +205,6 @@ def check_baseline(
             errors.append("references/opencode-baseline.json: supported hosts mismatch")
         if host_scope.get("unsupported") != UNSUPPORTED_HOSTS:
             errors.append("references/opencode-baseline.json: unsupported hosts mismatch")
-        unsupported_ref = host_scope.get("product_unsupported_cli_assets_ref")
-        expected_unsupported = (
-            (version.get("upstream_distribution_observation") or {}).get(
-                "product_unsupported_cli_assets"
-            )
-            if isinstance(version.get("upstream_distribution_observation"), dict)
-            else None
-        )
-        if resolve_ref(version, unsupported_ref) != expected_unsupported:
-            errors.append("references/opencode-baseline.json: unsupported asset ref mismatch")
     configuration = baseline.get("configuration")
     if not isinstance(configuration, dict):
         errors.append("references/opencode-baseline.json: configuration object required")
@@ -307,16 +296,6 @@ def check_release(
         errors.append("build/version.json: supported product host IDs mismatch")
     if version.get("unsupported_product_hosts") != UNSUPPORTED_HOSTS:
         errors.append("build/version.json: unsupported product host categories mismatch")
-    observation = version.get("upstream_distribution_observation")
-    if not isinstance(observation, dict):
-        errors.append("build/version.json: upstream distribution observation required")
-    else:
-        unsupported_assets = observation.get("product_unsupported_cli_assets")
-        if not isinstance(unsupported_assets, dict) or set(unsupported_assets) != {
-            "windows",
-            "linux-musl",
-        }:
-            errors.append("build/version.json: unsupported upstream asset groups mismatch")
     if version.get("python_requires") != ">=3.9":
         errors.append("build/version.json: python_requires must remain >=3.9")
 

@@ -198,7 +198,6 @@
     "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
     "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
     "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
-    "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
     "host_check_before_network": true,
     "host_check_before_stage": true,
     "host_check_before_target_inspection": true

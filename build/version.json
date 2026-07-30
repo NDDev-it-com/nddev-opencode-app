@@ -73,88 +73,6 @@
     "linux-musl",
     "unsupported-architecture"
   ],
-  "upstream_distribution_observation": {
-    "cli_asset_families": [
-      "darwin",
-      "linux-glibc",
-      "linux-musl",
-      "windows",
-      "x64-baseline"
-    ],
-    "desktop_packages_excluded_from_cli_manager": [
-      ".deb",
-      ".rpm",
-      "AppImage"
-    ],
-    "ubuntu_glibc_version_floor": null,
-    "ubuntu_glibc_version_floor_note": "no-official-floor",
-    "product_unsupported_cli_assets": {
-      "windows": {
-        "windows-arm64": {
-          "id": 492338717,
-          "name": "opencode-windows-arm64.zip",
-          "size": 57687772,
-          "sha256": "3a2c5a6f246bd0fdb395b35d8cc60f1be86f7f794a22cb517d2fe8de9aa951b4",
-          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-arm64.zip",
-          "format": "zip",
-          "product_supported": false,
-          "unsupported_category": "windows"
-        },
-        "windows-x64": {
-          "id": 492338712,
-          "name": "opencode-windows-x64.zip",
-          "size": 59527527,
-          "sha256": "85baa5de531db8d611fb5d9a62ffee00f6de69ae26e4845ec091dd2da4eb5fd1",
-          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64.zip",
-          "format": "zip",
-          "product_supported": false,
-          "unsupported_category": "windows"
-        },
-        "windows-x64-baseline": {
-          "id": 492338711,
-          "name": "opencode-windows-x64-baseline.zip",
-          "size": 59527534,
-          "sha256": "91d1b2e0faf5210ff06ae7d1014905531dfea723ab088455e553deafdb722006",
-          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64-baseline.zip",
-          "format": "zip",
-          "product_supported": false,
-          "unsupported_category": "windows"
-        }
-      },
-      "linux-musl": {
-        "linux-arm64-musl": {
-          "id": 492336443,
-          "name": "opencode-linux-arm64-musl.tar.gz",
-          "size": 61339081,
-          "sha256": "c44352641abb0657f16d110b898772b69cb6ea0a5aad683c84e393e73e4543d6",
-          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64-musl.tar.gz",
-          "format": "tar.gz",
-          "product_supported": false,
-          "unsupported_category": "linux-musl"
-        },
-        "linux-x64-baseline-musl": {
-          "id": 492336400,
-          "name": "opencode-linux-x64-baseline-musl.tar.gz",
-          "size": 61767670,
-          "sha256": "56828e3e68f34c686a41d01b37b7a64166e5f7ad5889fe2164a2a2b9ea563ee0",
-          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline-musl.tar.gz",
-          "format": "tar.gz",
-          "product_supported": false,
-          "unsupported_category": "linux-musl"
-        },
-        "linux-x64-musl": {
-          "id": 492336437,
-          "name": "opencode-linux-x64-musl.tar.gz",
-          "size": 61767670,
-          "sha256": "7e7a991aff33ae330308e88bfa8e6a5ea4125b468f4de6657b93d76200897a41",
-          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-musl.tar.gz",
-          "format": "tar.gz",
-          "product_supported": false,
-          "unsupported_category": "linux-musl"
-        }
-      }
-    }
-  },
   "artifact_product_host_map": {
     "darwin-arm64": {
       "product_host": "macos-arm64",
@@ -224,13 +142,6 @@
       "sha256": "132b605fe6081e1daf1a59a43a83125db86864d59feb9c68320fafbe0cb0bdb1",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline.tar.gz"
     }
-  },
-  "npm_observation": {
-    "package": "opencode-ai",
-    "version": "1.18.8",
-    "integrity": "sha512-eZvYK0rIc/NUDQ+s3LsO9gyUU3MswsbNOLZz06iPwVhbg/2jF6bkTaroBgiIdFWKwUn5sj+kSMc4TBYxFkMrNQ==",
-    "shasum": "3e9ea464402a8601ca85390d86b31b82e227a4ae",
-    "install_channel": "not-used-by-nddev-0.2.0"
   },
   "python_requires": ">=3.9",
   "runtime_baseline_ref": "references/opencode-baseline.json"

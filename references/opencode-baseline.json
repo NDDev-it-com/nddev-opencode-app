@@ -26,7 +26,6 @@
   "artifact_product_host_map_ref": "build/version.json:artifact_product_host_map",
   "supported_product_hosts_ref": "build/version.json:supported_product_hosts",
   "unsupported_product_hosts_ref": "build/version.json:unsupported_product_hosts",
-  "upstream_distribution_observation_ref": "build/version.json:upstream_distribution_observation",
   "product_host_scope": {
     "supported": [
       "macos-arm64",
@@ -43,27 +42,7 @@
     "linux_distribution_metadata": "platform.freedesktop_os_release",
     "ubuntu_glibc_version_floor": null,
     "ubuntu_glibc_version_floor_note": "no-official-floor",
-    "linux_vendor_artifact_names": "The upstream CLI release assets retain vendor names such as linux-x64 and linux-x64-baseline; nddev-opencode-app maps the glibc Linux artifacts only after the host is verified as ID=ubuntu and glibc.",
-    "observed_upstream_cli_asset_families": [
-      "darwin",
-      "linux-glibc",
-      "linux-musl",
-      "windows",
-      "x64-baseline"
-    ],
-    "desktop_packages_excluded_from_cli_manager": [
-      ".deb",
-      ".rpm",
-      "AppImage"
-    ],
-    "product_unsupported_cli_assets_ref": "build/version.json:upstream_distribution_observation.product_unsupported_cli_assets"
-  },
-  "npm_observation": {
-    "package": "opencode-ai",
-    "version": "1.18.8",
-    "integrity": "sha512-eZvYK0rIc/NUDQ+s3LsO9gyUU3MswsbNOLZz06iPwVhbg/2jF6bkTaroBgiIdFWKwUn5sj+kSMc4TBYxFkMrNQ==",
-    "shasum": "3e9ea464402a8601ca85390d86b31b82e227a4ae",
-    "used_by_nddev_install": false
+    "linux_vendor_artifact_names": "The upstream CLI release assets retain vendor names such as linux-x64 and linux-x64-baseline; nddev-opencode-app maps the glibc Linux artifacts only after the host is verified as ID=ubuntu and glibc."
   },
   "official_sources": {
     "repository": "https://github.com/anomalyco/opencode",

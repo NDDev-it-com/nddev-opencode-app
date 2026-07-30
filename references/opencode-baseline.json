@@ -1,6 +1,5 @@
 {
   "schema_version": 2,
-  "verified_date": "2026-07-28",
   "verified_version_ref": "build/version.json:opencode_version",
   "runtime": {
     "product": "OpenCode",

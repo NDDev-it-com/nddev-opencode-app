@@ -206,69 +206,6 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "tar.gz",
     },
 }
-OBSERVED_UNSUPPORTED_ARTIFACTS: dict[str, dict[str, Any]] = {
-    "windows-arm64": {
-        "id": 492338717,
-        "name": "opencode-windows-arm64.zip",
-        "size": 57687772,
-        "sha256": "3a2c5a6f246bd0fdb395b35d8cc60f1be86f7f794a22cb517d2fe8de9aa951b4",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-arm64.zip",
-        "format": "zip",
-        "product_supported": False,
-        "unsupported_category": "windows",
-    },
-    "windows-x64": {
-        "id": 492338712,
-        "name": "opencode-windows-x64.zip",
-        "size": 59527527,
-        "sha256": "85baa5de531db8d611fb5d9a62ffee00f6de69ae26e4845ec091dd2da4eb5fd1",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64.zip",
-        "format": "zip",
-        "product_supported": False,
-        "unsupported_category": "windows",
-    },
-    "windows-x64-baseline": {
-        "id": 492338711,
-        "name": "opencode-windows-x64-baseline.zip",
-        "size": 59527534,
-        "sha256": "91d1b2e0faf5210ff06ae7d1014905531dfea723ab088455e553deafdb722006",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-windows-x64-baseline.zip",
-        "format": "zip",
-        "product_supported": False,
-        "unsupported_category": "windows",
-    },
-    "linux-arm64-musl": {
-        "id": 492336443,
-        "name": "opencode-linux-arm64-musl.tar.gz",
-        "size": 61339081,
-        "sha256": "c44352641abb0657f16d110b898772b69cb6ea0a5aad683c84e393e73e4543d6",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-arm64-musl.tar.gz",
-        "format": "tar.gz",
-        "product_supported": False,
-        "unsupported_category": "linux-musl",
-    },
-    "linux-x64-baseline-musl": {
-        "id": 492336400,
-        "name": "opencode-linux-x64-baseline-musl.tar.gz",
-        "size": 61767670,
-        "sha256": "56828e3e68f34c686a41d01b37b7a64166e5f7ad5889fe2164a2a2b9ea563ee0",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-baseline-musl.tar.gz",
-        "format": "tar.gz",
-        "product_supported": False,
-        "unsupported_category": "linux-musl",
-    },
-    "linux-x64-musl": {
-        "id": 492336437,
-        "name": "opencode-linux-x64-musl.tar.gz",
-        "size": 61767670,
-        "sha256": "7e7a991aff33ae330308e88bfa8e6a5ea4125b468f4de6657b93d76200897a41",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.8/opencode-linux-x64-musl.tar.gz",
-        "format": "tar.gz",
-        "product_supported": False,
-        "unsupported_category": "linux-musl",
-    },
-}
-
 LAUNCH_FORCED_ENV = {
     "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
     "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
@@ -4603,7 +4540,7 @@ def verify_release_metadata(data: dict[str, Any]) -> None:
     assets = {
         asset.get("name"): asset for asset in data.get("assets", []) if isinstance(asset, dict)
     }
-    for artifact in (*ARTIFACTS.values(), *OBSERVED_UNSUPPORTED_ARTIFACTS.values()):
+    for artifact in ARTIFACTS.values():
         found = assets.get(artifact["name"])
         if not found:
             fail(f"OpenCode release asset missing: {artifact['name']}")

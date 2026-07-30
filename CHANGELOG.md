@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-07-30
+
+- Keep GitHub release and asset numeric identifiers, tag-ref currentness, and
+  publication observations out of the runtime install and software stamp.
+- Preserve exact supported artifact URL, size, SHA-256, version probing, and
+  backward reading of schema-2 stamps containing legacy observation fields.
+
+## 0.2.0 - 2026-07-30
+
 - Restructure OpenCode setup ownership into the `nddev-builder` content setup
   plus `full-auto` and `safe` runtime profiles.
 - Pin OpenCode to the official immutable GitHub release asset contract owned by

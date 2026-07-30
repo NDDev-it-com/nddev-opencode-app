@@ -56,10 +56,12 @@ python3 cli-tools/nddev_opencode.py update-cli --target /absolute/opencode-targe
 python3 cli-tools/nddev_opencode.py remove-cli --target /absolute/opencode-target --json
 ```
 
-Downloaded archives fail closed on metadata, size, or digest mismatch.
+Downloaded archives fail closed on canonical URL, size, or digest mismatch.
 Extraction accepts exactly one regular `opencode` binary and rejects unsafe
-archive entries. Provenance details are owned by `build/version.json` and
-`references/opencode-baseline.json`.
+archive entries. Installation does not make a release-currentness API request;
+numeric GitHub release and asset identifiers are development observations, not
+runtime integrity inputs. The public integrity contract is owned by
+`build/version.json` and `references/opencode-baseline.json`.
 
 ## Supported product hosts
 
@@ -74,8 +76,8 @@ AVX2 is not available. Baseline selection does not create a separate NDDev
 product host ID; it is an artifact-selection detail.
 
 The upstream release also publishes package families that are not part of this
-CLI manager. The observed-vs-supported separation is recorded in
-`references/opencode-baseline.json`.
+CLI manager. `references/opencode-baseline.json` records the public support
+boundary without embedding raw release API observations.
 
 ## Launch boundary
 

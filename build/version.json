@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "build_version": "0.2.0",
+  "build_version": "0.2.1",
   "opencode_product": "OpenCode",
   "opencode_version": "1.18.9",
   "opencode_min": "1.1.1",
@@ -8,11 +8,6 @@
   "official_repository": "https://github.com/anomalyco/opencode",
   "release": {
     "tag": "v1.18.9",
-    "id": 361269996,
-    "immutable": true,
-    "tag_ref": "4da7bb44c84e013fa53e9c5d02ac753d1435c81a",
-    "target_commitish": "f28d72d15e00f51f7e30f9cbf08b810f292bb3ee",
-    "published_at": "2026-07-28T18:15:01Z",
     "api": "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.9"
   },
   "supported_product_hosts": {
@@ -101,42 +96,36 @@
   },
   "artifacts": {
     "darwin-arm64": {
-      "id": 493010912,
       "name": "opencode-darwin-arm64.zip",
       "size": 44954303,
       "sha256": "6f998b7dabb9425bb348fd0d88afeb92a14422771231cec9b0f4374b947397e6",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.9/opencode-darwin-arm64.zip"
     },
     "darwin-x64": {
-      "id": 493010915,
       "name": "opencode-darwin-x64.zip",
       "size": 47190199,
       "sha256": "b9e6081f4db1f2066910f121258c23c8243438d22b1b80987d1569c5e40ef00e",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.9/opencode-darwin-x64.zip"
     },
     "darwin-x64-baseline": {
-      "id": 493010914,
       "name": "opencode-darwin-x64-baseline.zip",
       "size": 47190199,
       "sha256": "ee8ffb2971db99cc2d4638b9b26218e1e33484c616cc4ca9a41016f4c9424417",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.9/opencode-darwin-x64-baseline.zip"
     },
     "linux-arm64": {
-      "id": 493011012,
       "name": "opencode-linux-arm64.tar.gz",
       "size": 59122119,
       "sha256": "b16bd7593ea960a25d9c6849b3023bcd9b9244a6f51675341fd2052043b0670f",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.9/opencode-linux-arm64.tar.gz"
     },
     "linux-x64": {
-      "id": 493011017,
       "name": "opencode-linux-x64.tar.gz",
       "size": 59311767,
       "sha256": "a0fa4b7b8bdacbd013e79a5f69d4220d36b545cd3ea296ba765f3016fa501b5b",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.9/opencode-linux-x64.tar.gz"
     },
     "linux-x64-baseline": {
-      "id": 493011070,
       "name": "opencode-linux-x64-baseline.tar.gz",
       "size": 59311798,
       "sha256": "3eddbc5423264055f2527a0abd2d3a6fc6bbca3dced6bbd85d5d4cc27beacad2",

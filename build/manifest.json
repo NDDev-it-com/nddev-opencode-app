@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "name": "nddev-opencode-app",
-  "build_version": "0.2.0",
+  "build_version": "0.2.1",
   "entrypoint": "python3 cli-tools/nddev_opencode.py",
   "source_roots": {
     "setups": "setups",
@@ -168,6 +168,7 @@
     "update_command": "python3 cli-tools/nddev_opencode.py update-cli --target <absolute-target> --json",
     "remove_command": "python3 cli-tools/nddev_opencode.py remove-cli --target <absolute-target> --json",
     "install_channel": "official-github-release-asset",
+    "release_currentness_network_required": false,
     "target_owned": true,
     "software_root": ".nddev-opencode-software/current",
     "entrypoint": "bin/opencode",
@@ -176,7 +177,14 @@
     "download_policy": {
       "content_length_required": true,
       "bounded_chunked_read": true,
-      "fail_on_short_or_long_body": true
+      "fail_on_short_or_long_body": true,
+      "integrity_fields": [
+        "name",
+        "url",
+        "size",
+        "sha256",
+        "version"
+      ]
     },
     "transaction_rollback": {
       "fresh_install": true,

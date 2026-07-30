@@ -71,7 +71,24 @@ FORBIDDEN_PUBLIC_PARTS = {
     "validation",
 }
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
-HEX_COMMIT_RE = re.compile(r"[0-9a-f]{40}")
+OBSERVATION_ONLY_RELEASE_FIELDS = {
+    "id",
+    "immutable",
+    "published_at",
+    "tag_ref",
+    "target_commitish",
+}
+OBSERVATION_ONLY_ARTIFACT_FIELDS = {"id"}
+OBSERVATION_ONLY_MANAGER_NAMES = {
+    "OPENCODE_RELEASE_ID",
+    "OPENCODE_RELEASE_IMMUTABLE",
+    "OPENCODE_TAG_REF",
+    "OPENCODE_TARGET_COMMIT",
+    "fetch_release_metadata",
+    "verify_release_metadata",
+    "metadata_fetcher",
+    "release_verifier",
+}
 
 
 def check_real_regular_file(relative: str, errors: list[str]) -> None:
@@ -166,11 +183,6 @@ def check_baseline_release(
         "github_release": (f"https://github.com/anomalyco/opencode/releases/tag/v{runtime}"),
         "github_release_api": release.get("api"),
         "tag": release.get("tag"),
-        "release_id": release.get("id"),
-        "immutable": release.get("immutable"),
-        "published_at": release.get("published_at"),
-        "tag_ref": release.get("tag_ref"),
-        "target_commitish": release.get("target_commitish"),
     }
     for key, value in expected.items():
         if baseline_release.get(key) != value:
@@ -178,10 +190,13 @@ def check_baseline_release(
                 "references/opencode-baseline.json: "
                 f"release.{key} disagrees with build/version.json"
             )
-    if baseline_release.get("draft") is not False:
-        errors.append("references/opencode-baseline.json: release must not be a draft")
-    if baseline_release.get("prerelease") is not False:
-        errors.append("references/opencode-baseline.json: release must not be a prerelease")
+    forbidden = OBSERVATION_ONLY_RELEASE_FIELDS | {"draft", "prerelease", "release_id"}
+    observed = forbidden & set(baseline_release)
+    if observed:
+        errors.append(
+            "references/opencode-baseline.json: observation-only release fields forbidden: "
+            f"{sorted(observed)}"
+        )
     if baseline_release.get("cli_signature") is not None:
         errors.append("references/opencode-baseline.json: unsupported CLI signature claim")
     if not str(baseline_release.get("cli_signature_note", "")).strip():
@@ -276,13 +291,14 @@ def check_release(
     else:
         if release.get("tag") != f"v{runtime}":
             errors.append("build/version.json: release tag must match opencode_version")
-        if not isinstance(release.get("id"), int) or release.get("id", 0) <= 0:
-            errors.append("build/version.json: release id must be a positive integer")
-        if release.get("immutable") is not True:
-            errors.append("build/version.json: release must be immutable")
-        for key in ("tag_ref", "target_commitish"):
-            if HEX_COMMIT_RE.fullmatch(str(release.get(key, ""))) is None:
-                errors.append(f"build/version.json: release.{key} must be a commit SHA")
+        observed = OBSERVATION_ONLY_RELEASE_FIELDS & set(release)
+        if observed:
+            errors.append(
+                "build/version.json: observation-only release fields forbidden: "
+                f"{sorted(observed)}"
+            )
+        if set(release) != {"tag", "api"}:
+            errors.append("build/version.json: release keys must be exactly tag and api")
         expected_api = f"https://api.github.com/repos/anomalyco/opencode/releases/tags/v{runtime}"
         if release.get("api") != expected_api:
             errors.append("build/version.json: release.api must match the pinned tag")
@@ -302,10 +318,15 @@ def check_release(
             errors.append(f"{context}: object required")
             continue
         name = f"opencode-{artifact_id}{suffix}"
+        observed = OBSERVATION_ONLY_ARTIFACT_FIELDS & set(artifact)
+        if observed:
+            errors.append(
+                f"{context}: observation-only fields forbidden: {sorted(observed)}"
+            )
+        if set(artifact) != {"name", "size", "sha256", "url"}:
+            errors.append(f"{context}: keys must be exactly name, size, sha256, and url")
         if artifact.get("name") != name:
             errors.append(f"{context}: canonical filename mismatch")
-        if not isinstance(artifact.get("id"), int) or artifact.get("id", 0) <= 0:
-            errors.append(f"{context}: id must be a positive integer")
         if not isinstance(artifact.get("size"), int) or artifact.get("size", 0) <= 0:
             errors.append(f"{context}: size must be a positive integer")
         if SHA256_RE.fullmatch(str(artifact.get("sha256", ""))) is None:
@@ -499,9 +520,24 @@ def check_manager_source(errors: list[str]) -> None:
     if not source:
         return
     try:
-        ast.parse(source, filename=relative)
+        tree = ast.parse(source, filename=relative)
     except SyntaxError as exc:
         errors.append(f"{relative}: invalid Python syntax: {exc}")
+        return
+    names = {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+    } | {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    observed = OBSERVATION_ONLY_MANAGER_NAMES & names
+    if observed:
+        errors.append(
+            f"{relative}: observation-only runtime names forbidden: {sorted(observed)}"
+        )
 
 
 def check_public_tree(errors: list[str]) -> None:

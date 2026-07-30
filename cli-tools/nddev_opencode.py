@@ -97,10 +97,6 @@ READ_ONLY_RETRY_ATTEMPTS = 4
 
 OPENCODE_VERSION = "1.18.9"
 OPENCODE_RELEASE_TAG = "v1.18.9"
-OPENCODE_RELEASE_ID = 361269996
-OPENCODE_RELEASE_IMMUTABLE = True
-OPENCODE_TAG_REF = "4da7bb44c84e013fa53e9c5d02ac753d1435c81a"
-OPENCODE_TARGET_COMMIT = "f28d72d15e00f51f7e30f9cbf08b810f292bb3ee"
 OPENCODE_RELEASE_API = "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.9"
 OPENCODE_COMMAND = "opencode"
 SOFTWARE_DIR_NAME = ".nddev-opencode-software"
@@ -158,7 +154,6 @@ ARTIFACT_PRODUCT_HOSTS = {
 
 ARTIFACTS: dict[str, dict[str, Any]] = {
     "darwin-arm64": {
-        "id": 493010912,
         "name": "opencode-darwin-arm64.zip",
         "size": 44954303,
         "sha256": "6f998b7dabb9425bb348fd0d88afeb92a14422771231cec9b0f4374b947397e6",
@@ -166,7 +161,6 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "zip",
     },
     "darwin-x64": {
-        "id": 493010915,
         "name": "opencode-darwin-x64.zip",
         "size": 47190199,
         "sha256": "b9e6081f4db1f2066910f121258c23c8243438d22b1b80987d1569c5e40ef00e",
@@ -174,7 +168,6 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "zip",
     },
     "darwin-x64-baseline": {
-        "id": 493010914,
         "name": "opencode-darwin-x64-baseline.zip",
         "size": 47190199,
         "sha256": "ee8ffb2971db99cc2d4638b9b26218e1e33484c616cc4ca9a41016f4c9424417",
@@ -182,7 +175,6 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "zip",
     },
     "linux-arm64": {
-        "id": 493011012,
         "name": "opencode-linux-arm64.tar.gz",
         "size": 59122119,
         "sha256": "b16bd7593ea960a25d9c6849b3023bcd9b9244a6f51675341fd2052043b0670f",
@@ -190,7 +182,6 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "tar.gz",
     },
     "linux-x64": {
-        "id": 493011017,
         "name": "opencode-linux-x64.tar.gz",
         "size": 59311767,
         "sha256": "a0fa4b7b8bdacbd013e79a5f69d4220d36b545cd3ea296ba765f3016fa501b5b",
@@ -198,7 +189,6 @@ ARTIFACTS: dict[str, dict[str, Any]] = {
         "format": "tar.gz",
     },
     "linux-x64-baseline": {
-        "id": 493011070,
         "name": "opencode-linux-x64-baseline.tar.gz",
         "size": 59311798,
         "sha256": "3eddbc5423264055f2527a0abd2d3a6fc6bbca3dced6bbd85d5d4cc27beacad2",
@@ -4520,40 +4510,6 @@ def platform_key() -> str:
     return str(detect_supported_host()["artifact_platform"])
 
 
-def fetch_release_metadata() -> dict[str, Any]:
-    with urllib.request.urlopen(OPENCODE_RELEASE_API, timeout=30) as response:
-        return json.load(response)
-
-
-def verify_release_metadata(data: dict[str, Any]) -> None:
-    checks = {
-        "tag_name": data.get("tag_name") == OPENCODE_RELEASE_TAG,
-        "id": data.get("id") == OPENCODE_RELEASE_ID,
-        "draft": data.get("draft") is False,
-        "prerelease": data.get("prerelease") is False,
-        "immutable": data.get("immutable") is OPENCODE_RELEASE_IMMUTABLE,
-        "target_commitish": data.get("target_commitish") == OPENCODE_TARGET_COMMIT,
-    }
-    failed = [name for name, ok in checks.items() if not ok]
-    if failed:
-        fail(f"OpenCode release metadata mismatch: {failed}")
-    assets = {
-        asset.get("name"): asset for asset in data.get("assets", []) if isinstance(asset, dict)
-    }
-    for artifact in ARTIFACTS.values():
-        found = assets.get(artifact["name"])
-        if not found:
-            fail(f"OpenCode release asset missing: {artifact['name']}")
-        if found.get("id") != artifact["id"]:
-            fail(f"OpenCode release asset id mismatch: {artifact['name']}")
-        if found.get("size") != artifact["size"]:
-            fail(f"OpenCode release asset size mismatch: {artifact['name']}")
-        if found.get("digest") != f"sha256:{artifact['sha256']}":
-            fail(f"OpenCode release asset digest mismatch: {artifact['name']}")
-        if found.get("browser_download_url") != artifact["url"]:
-            fail(f"OpenCode release asset URL mismatch: {artifact['name']}")
-
-
 def response_content_length(response: Any) -> int:
     headers = getattr(response, "headers", None)
     raw: str | None = None
@@ -4732,15 +4688,10 @@ def software_stamp(
         "product_host": host,
         "release": {
             "tag": OPENCODE_RELEASE_TAG,
-            "id": OPENCODE_RELEASE_ID,
-            "immutable": OPENCODE_RELEASE_IMMUTABLE,
-            "tag_ref": OPENCODE_TAG_REF,
-            "target_commitish": OPENCODE_TARGET_COMMIT,
             "api": OPENCODE_RELEASE_API,
         },
         "artifact": {
             "platform": artifact_key,
-            "id": artifact["id"],
             "name": artifact["name"],
             "size": artifact["size"],
             "sha256": artifact["sha256"],
@@ -4845,7 +4796,7 @@ def software_status_payload(target: Path) -> dict[str, Any]:
         drift.append("artifact")
     else:
         expected = ARTIFACTS[artifact["platform"]]
-        for key in ("id", "name", "size", "sha256", "url", "format"):
+        for key in ("name", "size", "sha256", "url", "format"):
             if artifact.get(key) != expected[key]:
                 drift.append(f"artifact.{key}")
     try:
@@ -4977,8 +4928,6 @@ def install_cli(
     *,
     update: bool,
     host_detector: Callable[[], dict[str, Any]] = detect_supported_host,
-    metadata_fetcher: Callable[[], dict[str, Any]] = fetch_release_metadata,
-    release_verifier: Callable[[dict[str, Any]], None] = verify_release_metadata,
     artifact_resolver: Callable[[str], dict[str, Any]] | None = None,
     artifact_downloader: Callable[[str, Path, int], None] = download_artifact,
     version_probe: Callable[[Path, Path], str] = run_version_probe,
@@ -5018,8 +4967,6 @@ def install_cli(
         "x64_baseline"
     ):
         fail("internal product host to artifact mapping mismatch")
-    data = metadata_fetcher()
-    release_verifier(data)
     artifact = (artifact_resolver or ARTIFACTS.__getitem__)(key)
     root = software_root(target)
     stage_parent = target / f".nddev-opencode-software-stage.{os.getpid()}.{time.time_ns()}"

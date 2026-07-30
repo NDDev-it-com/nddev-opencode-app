@@ -294,8 +294,7 @@ def check_release(
         observed = OBSERVATION_ONLY_RELEASE_FIELDS & set(release)
         if observed:
             errors.append(
-                "build/version.json: observation-only release fields forbidden: "
-                f"{sorted(observed)}"
+                f"build/version.json: observation-only release fields forbidden: {sorted(observed)}"
             )
         if set(release) != {"tag", "api"}:
             errors.append("build/version.json: release keys must be exactly tag and api")
@@ -320,9 +319,7 @@ def check_release(
         name = f"opencode-{artifact_id}{suffix}"
         observed = OBSERVATION_ONLY_ARTIFACT_FIELDS & set(artifact)
         if observed:
-            errors.append(
-                f"{context}: observation-only fields forbidden: {sorted(observed)}"
-            )
+            errors.append(f"{context}: observation-only fields forbidden: {sorted(observed)}")
         if set(artifact) != {"name", "size", "sha256", "url"}:
             errors.append(f"{context}: keys must be exactly name, size, sha256, and url")
         if artifact.get("name") != name:
@@ -524,20 +521,14 @@ def check_manager_source(version: dict[str, Any] | None, errors: list[str]) -> N
     except SyntaxError as exc:
         errors.append(f"{relative}: invalid Python syntax: {exc}")
         return
-    names = {
-        node.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Name)
-    } | {
+    names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)} | {
         node.name
         for node in ast.walk(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     observed = OBSERVATION_ONLY_MANAGER_NAMES & names
     if observed:
-        errors.append(
-            f"{relative}: observation-only runtime names forbidden: {sorted(observed)}"
-        )
+        errors.append(f"{relative}: observation-only runtime names forbidden: {sorted(observed)}")
     literals: dict[str, object] = {}
     for node in tree.body:
         target: ast.expr | None = None

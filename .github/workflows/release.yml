@@ -24,10 +24,8 @@ jobs:
       version: ${{ github.ref_name }}
       package_name: nddev-opencode-app
       archive_paths: >-
-        README.md LICENSE VERSION CHANGELOG.md SECURITY.md AGENTS.md
-        .claude/CLAUDE.md .gitignore .gds .github build cli-tools config
-        references setups profiles/full-auto/opencode.json
-        profiles/full-auto/profile.json profiles/safe/opencode.json
-        profiles/safe/profile.json
+        README.md LICENSE VERSION CHANGELOG.md SECURITY.md AGENTS.md .claude
+        .gitignore .gds .github build cli-tools config references setups profiles
       runtime_paths: >-
-        README.md LICENSE VERSION build cli-tools config references setups
+        README.md LICENSE VERSION AGENTS.md .claude build cli-tools config
+        references setups profiles

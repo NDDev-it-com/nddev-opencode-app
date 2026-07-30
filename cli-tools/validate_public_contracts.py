@@ -74,6 +74,33 @@ SHA256_RE = re.compile(r"[0-9a-f]{64}")
 HEX_COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 
 
+def check_real_regular_file(relative: str, errors: list[str]) -> None:
+    path = ROOT / relative
+    try:
+        mode = path.lstat().st_mode
+    except OSError:
+        errors.append(f"missing required regular file: {relative}")
+        return
+    if not stat.S_ISREG(mode):
+        errors.append(f"{relative}: must be a real regular file")
+
+
+def check_context_closure(errors: list[str]) -> None:
+    directory = ROOT / ".claude"
+    try:
+        mode = directory.lstat().st_mode
+    except OSError:
+        errors.append("missing required directory: .claude")
+        return
+    if not stat.S_ISDIR(mode):
+        errors.append(".claude: must be a real directory")
+        return
+    entries = {entry.name for entry in directory.iterdir()}
+    if entries != {"CLAUDE.md"}:
+        errors.append(f".claude: entries must be exactly ['CLAUDE.md'], found {sorted(entries)}")
+    check_real_regular_file(".claude/CLAUDE.md", errors)
+
+
 def load_json(relative: str, errors: list[str]) -> dict[str, Any] | None:
     path = ROOT / relative
     if not path.is_file():
@@ -502,6 +529,8 @@ def main() -> int:
     check_contract(contract, manifest, version, errors)
     check_setup_and_profiles(errors)
     check_manager_source(errors)
+    check_real_regular_file("AGENTS.md", errors)
+    check_context_closure(errors)
     for relative in (
         "README.md",
         "AGENTS.md",

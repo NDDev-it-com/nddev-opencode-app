@@ -514,7 +514,7 @@ def check_setup_and_profiles(errors: list[str]) -> None:
                 errors.append("profiles/safe/opencode.json: permission posture mismatch")
 
 
-def check_manager_source(errors: list[str]) -> None:
+def check_manager_source(version: dict[str, Any] | None, errors: list[str]) -> None:
     relative = "cli-tools/nddev_opencode.py"
     source = check_text(relative, errors)
     if not source:
@@ -538,6 +538,52 @@ def check_manager_source(errors: list[str]) -> None:
         errors.append(
             f"{relative}: observation-only runtime names forbidden: {sorted(observed)}"
         )
+    literals: dict[str, object] = {}
+    for node in tree.body:
+        target: ast.expr | None = None
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+            value = node.value
+        if isinstance(target, ast.Name) and target.id in {
+            "OPENCODE_VERSION",
+            "OPENCODE_RELEASE_TAG",
+            "OPENCODE_RELEASE_API",
+            "ARTIFACTS",
+        }:
+            try:
+                literals[target.id] = ast.literal_eval(value)
+            except (TypeError, ValueError):
+                errors.append(f"{relative}: {target.id} must be a static literal")
+    if version is None:
+        return
+    release = version.get("release")
+    if literals.get("OPENCODE_VERSION") != version.get("opencode_version"):
+        errors.append(f"{relative}: OPENCODE_VERSION disagrees with build/version.json")
+    if not isinstance(release, dict):
+        return
+    if literals.get("OPENCODE_RELEASE_TAG") != release.get("tag"):
+        errors.append(f"{relative}: OPENCODE_RELEASE_TAG disagrees with build/version.json")
+    if literals.get("OPENCODE_RELEASE_API") != release.get("api"):
+        errors.append(f"{relative}: OPENCODE_RELEASE_API disagrees with build/version.json")
+    manager_artifacts = literals.get("ARTIFACTS")
+    version_artifacts = version.get("artifacts")
+    if not isinstance(manager_artifacts, dict) or not isinstance(version_artifacts, dict):
+        errors.append(f"{relative}: static ARTIFACTS table required")
+        return
+    expected = {
+        artifact_id: {
+            **artifact,
+            "format": "zip" if artifact_id.startswith("darwin-") else "tar.gz",
+        }
+        for artifact_id, artifact in version_artifacts.items()
+        if isinstance(artifact, dict)
+    }
+    if manager_artifacts != expected:
+        errors.append(f"{relative}: ARTIFACTS disagrees with build/version.json")
 
 
 def check_public_tree(errors: list[str]) -> None:
@@ -564,7 +610,7 @@ def main() -> int:
     check_manifest(version_text, manifest, version, errors)
     check_contract(contract, manifest, version, errors)
     check_setup_and_profiles(errors)
-    check_manager_source(errors)
+    check_manager_source(version, errors)
     check_real_regular_file("AGENTS.md", errors)
     check_context_closure(errors)
     for relative in (

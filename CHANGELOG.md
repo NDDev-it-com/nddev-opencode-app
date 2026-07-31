@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.2.1 - 2026-07-30
+## [0.2.1] - 2026-07-30
 
 - Keep GitHub release and asset numeric identifiers, tag-ref currentness, and
   publication observations out of the runtime install and software stamp.

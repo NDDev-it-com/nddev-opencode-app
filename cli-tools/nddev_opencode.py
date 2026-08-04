@@ -4658,6 +4658,11 @@ def run_version_probe(binary: Path, stage: Path) -> str:
         text=True,
         check=False,
         timeout=VERSION_PROBE_TIMEOUT_SECONDS,
+        # The probe binary runs under an isolated HOME it may write to
+        # (e.g. ~/.cache). Force an owner-only umask so anything it creates
+        # is already mode 0700/0600 and survives the cleanup-object mode
+        # journaling that follows, regardless of the caller's ambient umask.
+        preexec_fn=lambda: os.umask(0o077),
     )
     output = (completed.stdout + completed.stderr).strip()
     if completed.returncode != 0:

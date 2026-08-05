@@ -8,9 +8,9 @@
     "minimum_version_ref": "build/version.json:opencode_min"
   },
   "release": {
-    "github_release": "https://github.com/anomalyco/opencode/releases/tag/v1.18.13",
-    "github_release_api": "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.13",
-    "tag": "v1.18.13",
+    "github_release": "https://github.com/anomalyco/opencode/releases/tag/v1.18.14",
+    "github_release_api": "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.14",
+    "tag": "v1.18.14",
     "cli_signature": null,
     "cli_signature_note": "Official CLI zip/tar assets expose GitHub release asset SHA-256 digests but no PGP/cosign signature was published for the CLI assets."
   },

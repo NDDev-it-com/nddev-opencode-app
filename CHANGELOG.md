@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.2.3] - 2026-08-06
+
+- Update OpenCode from `1.18.13` to stable `1.18.14` and synchronize exact
+  GitHub release identities for all six supported macOS and Ubuntu assets.
+- Preserve the native setup, profile, lifecycle, host-selection, and isolated
+  launch contracts; upstream changes are provider/runtime reliability fixes.
+
 ## [0.2.2] - 2026-08-05
 
 - Update OpenCode from `1.18.10` to stable `1.18.13` using the canonical

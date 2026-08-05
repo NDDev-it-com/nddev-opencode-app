@@ -1280,6 +1280,12 @@ def remove_empty_managed_parents(target: Path, relative: str) -> None:
         current = current.parent
 
 
+def prune_empty_managed_directories(target: Path) -> None:
+    """Remove only empty parent chains of paths owned by the setup contract."""
+    for relative in (*KNOWN_MANAGED_FILES, STAMP_NAME):
+        remove_empty_managed_parents(target, relative)
+
+
 def ensure_private_directory_chain(root: Path, relative: Path, label: str) -> None:
     require_real_private_directory(root, label)
     current = root
@@ -2294,6 +2300,7 @@ def remove_target(
         desired["opencode.json"] = canonical_json(stripped)
     changes = state_delta(target, desired)
     if not changes:
+        prune_empty_managed_directories(target)
         return {
             "ok": True,
             "operation": "remove",
@@ -2339,6 +2346,8 @@ def remove_target(
                 (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
             ],
         )
+        if not cleanup_pending:
+            prune_empty_managed_directories(target)
     except (CleanupJournalPublishedInvalid, CleanupPreparePublishedPending):
         raise
     except BaseException:

@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "name": "nddev-opencode-app",
-  "build_version": "0.2.1",
+  "build_version": "0.2.2",
   "entrypoint": "python3 cli-tools/nddev_opencode.py",
   "source_roots": {
     "setups": "setups",

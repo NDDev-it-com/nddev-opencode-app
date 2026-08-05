@@ -95,9 +95,9 @@ ANCHOR_TEMP_RANDOM_PATTERN = re.compile(r"[A-Za-z0-9_]{8}\Z")
 ANCHOR_PARENT_SCAN_LIMIT = 4096
 READ_ONLY_RETRY_ATTEMPTS = 4
 
-OPENCODE_VERSION = "1.18.10"
-OPENCODE_RELEASE_TAG = "v1.18.10"
-OPENCODE_RELEASE_API = "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.10"
+OPENCODE_VERSION = "1.18.13"
+OPENCODE_RELEASE_TAG = "v1.18.13"
+OPENCODE_RELEASE_API = "https://api.github.com/repos/anomalyco/opencode/releases/tags/v1.18.13"
 OPENCODE_COMMAND = "opencode"
 SOFTWARE_DIR_NAME = ".nddev-opencode-software"
 SOFTWARE_CURRENT_NAME = "current"
@@ -155,44 +155,44 @@ ARTIFACT_PRODUCT_HOSTS = {
 ARTIFACTS: dict[str, dict[str, Any]] = {
     "darwin-arm64": {
         "name": "opencode-darwin-arm64.zip",
-        "size": 44966503,
-        "sha256": "641fe2e65e42db76c2d32db5f85573c3682a8c72f82d01568a922a8feccc4658",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-darwin-arm64.zip",
+        "size": 45253324,
+        "sha256": "6a85ae6de1aeb8e39ae4d977337b03f49168c2a827ee37b6f82c39471d711c63",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.13/opencode-darwin-arm64.zip",
         "format": "zip",
     },
     "darwin-x64": {
         "name": "opencode-darwin-x64.zip",
-        "size": 47204998,
-        "sha256": "b2d9e161b3c6f398ab8a21a129455550c7b79b68579bb542dbc986f10b084ae4",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-darwin-x64.zip",
+        "size": 47484318,
+        "sha256": "5a119461c6ba265a9406bad616e2f845ee66ab8d004be5b5336547af3415c3fe",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.13/opencode-darwin-x64.zip",
         "format": "zip",
     },
     "darwin-x64-baseline": {
         "name": "opencode-darwin-x64-baseline.zip",
-        "size": 47204998,
-        "sha256": "db723500eda1d36f726748c0ba972f40a5029c3feec73f39478074ecc53a6096",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-darwin-x64-baseline.zip",
+        "size": 47484318,
+        "sha256": "71fd8020dec05f15241788b819944fb2c8e43504b93b53077d632c19fbad624a",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.13/opencode-darwin-x64-baseline.zip",
         "format": "zip",
     },
     "linux-arm64": {
         "name": "opencode-linux-arm64.tar.gz",
-        "size": 59142955,
-        "sha256": "41ae3041e91b894e4c0dc06a73a9a2796254bf390ffb99626a43af5e2912d170",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-linux-arm64.tar.gz",
+        "size": 59424771,
+        "sha256": "dd4ac8c2167a8338caf296b002c955141d52a2e9c95ee0a95f4ae9939c293ab0",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.13/opencode-linux-arm64.tar.gz",
         "format": "tar.gz",
     },
     "linux-x64": {
         "name": "opencode-linux-x64.tar.gz",
-        "size": 59327159,
-        "sha256": "6b1113da704253fb4da12b41e4236acecb9f2b62949c945f6eeacaa15111b976",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-linux-x64.tar.gz",
+        "size": 59609644,
+        "sha256": "8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.13/opencode-linux-x64.tar.gz",
         "format": "tar.gz",
     },
     "linux-x64-baseline": {
         "name": "opencode-linux-x64-baseline.tar.gz",
-        "size": 59327156,
-        "sha256": "e2841f720dee95855524cd8c8aad45438e9e7e13f6f043e85c246f2907bc2cf9",
-        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.10/opencode-linux-x64-baseline.tar.gz",
+        "size": 59609645,
+        "sha256": "d4471cc260d246b9b2df237ac03fafa75b6723306a6bc306e54dce6e9aa824db",
+        "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.13/opencode-linux-x64-baseline.tar.gz",
         "format": "tar.gz",
     },
 }

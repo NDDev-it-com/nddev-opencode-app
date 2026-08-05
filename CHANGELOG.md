@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.2.2] - 2026-08-05
+
+- Update OpenCode from `1.18.10` to stable `1.18.13` using the canonical
+  upstream release and exact digests and sizes for all six supported assets.
+- Preserve the existing native setup, profile, lifecycle, and host-selection
+  contracts while advancing only the verified runtime baseline.
+
 ## [0.2.1] - 2026-07-30
 
 - Keep GitHub release and asset numeric identifiers, tag-ref currentness, and

@@ -5154,6 +5154,7 @@ def remove_cli(
     drain_cleanup_pending(target, allow_pending=False)
     preflight_software_paths(target)
     if not software_presence(target):
+        remove_empty_managed_parents(target, f"bin/{OPENCODE_COMMAND}")
         return {
             "ok": True,
             "operation": "remove-cli",
@@ -5215,6 +5216,8 @@ def remove_cli(
         [(stage_root, "remove-cli:cleanup-stage")],
         fault_injection=fault_injection,
     )
+    if not cleanup_pending:
+        remove_empty_managed_parents(target, f"bin/{OPENCODE_COMMAND}")
     return {
         "ok": True,
         "operation": "remove-cli",

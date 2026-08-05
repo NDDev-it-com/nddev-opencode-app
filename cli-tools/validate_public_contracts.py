@@ -617,8 +617,7 @@ def main() -> int:
         check_text(relative, errors)
     for executable in ("cli-tools/nddev_opencode.py", "cli-tools/validate_public_contracts.py"):
         check_executable(executable, errors)
-    for workflow in WORKFLOWS:
-        check_text(f".github/workflows/{workflow}", errors)
+    check_text("release/package.yml", errors)
     check_public_tree(errors)
 
     if errors:

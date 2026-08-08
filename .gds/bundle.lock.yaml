@@ -5,11 +5,11 @@ bundle:
   version: "0.1.0-dev"
   release_sequence: 0
   channel: "development"
-  source_commit: "657577c5bb7a99217855834f9429f089afcb2082"
-  digest: "sha256:ffdae1fe0904b20cf12a741df8b5cdb7c5ddd4e5997874c8a23e1ee9f5c75deb"
+  source_commit: "1e02cf65d60fb7d6c8f0a066ab9b93c18246bd32"
+  digest: "sha256:444880765d710e66f3c3117e15cf35c1e23328a946fcd5035d960d42bafc040b"
 
 projection:
-  input_digest: "sha256:6bdc0e22985ada9b1882dc3bf7e3c284ee1e833648fcb7c0588841389e473033"
+  input_digest: "sha256:98b0b5a3c60f0a55637952add1932ac0eaa29147adbe45a83671d867e3ae20e4"
   output_digest: "sha256:bd69f66c87a53fced25f77fa4af736187067ac4fda296ce9782f7f0ca596b3bd"
   files:
     - path: ".claude/CLAUDE.md"

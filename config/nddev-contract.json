@@ -318,6 +318,19 @@
     "bounded_reads": true,
     "max_backups": 10
   },
+  "provider_protocol": {
+    "version": 3,
+    "bundle_format": "ai-stp-bundle/1",
+    "commands": ["provider-info", "validate-bundle", "plan-operation", "apply-operation", "status"],
+    "operations": ["backup", "install", "remove", "replace", "restore"],
+    "permission_profiles": ["safe", "full-auto"],
+    "component_kinds": ["agent", "command", "instruction", "plugin", "setting", "skill"],
+    "unsupported_component_kinds": ["hook", "mcp"],
+    "native_namespaces": ["AGENTS.md", "agents", "commands", "opencode.json", "plugins", "skills"],
+    "state_file": "NDDEV-OPENCODE-PROVIDER.json",
+    "exact_provenance": ["setup_passport_digest", "component_refs", "bundle_digest", "artifact_digest", "provider_release_digest", "plan_digest", "target_identity_digest", "native_ownership"],
+    "optional_standalone_lifecycle": ["software-status", "install-cli", "update-cli", "remove-cli", "launch"]
+  },
   "runtime_compatibility": {
     "product": "OpenCode",
     "version_ref": "build/version.json",

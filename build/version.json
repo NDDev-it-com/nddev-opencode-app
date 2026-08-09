@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "build_version": "0.2.4",
+  "build_version": "0.3.0",
   "opencode_product": "OpenCode",
   "opencode_version": "1.18.15",
   "opencode_min": "1.1.1",

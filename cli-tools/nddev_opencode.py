@@ -29,6 +29,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn, Optional
 
+sys.dont_write_bytecode = True
+CLI_TOOLS_ROOT = Path(__file__).resolve().parent
+if str(CLI_TOOLS_ROOT) not in sys.path:
+    sys.path.insert(0, str(CLI_TOOLS_ROOT))
+
+import provider_protocol_v3 as provider_wire_v3  # noqa: E402
+import provider_runtime_v3  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = (ROOT / "VERSION").read_text(encoding="ascii").strip()
 PRODUCT_NAME = "nddev-opencode-app"
@@ -44,6 +52,8 @@ SOFTWARE_STAMP_NAME = "NDDEV-OPENCODE-SOFTWARE.json"
 CLEANUP_PARENT_NAME = ".nddev-opencode-cleanup-pending"
 CLEANUP_JOURNAL_NAME = "NDDEV-OPENCODE-CLEANUP.json"
 CLEANUP_PREPARE_NAME = "NDDEV-OPENCODE-CLEANUP.prepare.json"
+PROVIDER_STATE_NAME = "NDDEV-OPENCODE-PROVIDER.json"
+PROVIDER_BACKUP_DIRECTORY = ".nddev-opencode-provider-backups"
 STAMP_SCHEMA = 2
 BACKUP_SCHEMA = 3
 SOFTWARE_STAMP_SCHEMA = 2
@@ -64,6 +74,23 @@ PROCESS_OUTPUT_MAX_BYTES = 64 * 1024
 VERSION_PROBE_TIMEOUT_SECONDS = 120
 DOWNLOAD_TIMEOUT_SECONDS = 900
 DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+PROVIDER_V3 = provider_runtime_v3.Runtime(
+    provider_runtime_v3.Config(
+        root=ROOT,
+        provider_id=PRODUCT_NAME,
+        harness_id="opencode",
+        provider_version=VERSION,
+        state_name=PROVIDER_STATE_NAME,
+        backup_directory=PROVIDER_BACKUP_DIRECTORY,
+        component_kinds=frozenset(
+            {"instruction", "skill", "command", "agent", "plugin", "setting"}
+        ),
+        native_namespaces=frozenset(
+            {"AGENTS.md", "opencode.json", "skills", "agents", "commands", "plugins"}
+        ),
+        permission_profiles=("safe", "full-auto"),
+    )
+)
 
 CONTENT_FILES = (
     "AGENTS.md",
@@ -809,7 +836,13 @@ def managed_digest(relative: str, content: bytes) -> str:
 
 def render_content_setup() -> ContentSetup:
     metadata = read_json_file(SETUP_ROOT / "setup.json", "setups/nddev-builder/setup.json")
-    expected_keys = {"schema_version", "id", "description", "content_files", "builder_enabled"}
+    expected_keys = {
+        "schema_version",
+        "id",
+        "description",
+        "content_files",
+        "builder_enabled",
+    }
     if set(metadata) != expected_keys:
         fail("setups/nddev-builder/setup.json has invalid keys")
     if metadata["schema_version"] != 2 or metadata["id"] != CONTENT_SETUP_ID:
@@ -834,7 +867,13 @@ def render_profile(profile_id: str) -> Profile:
         fail(f"unknown profile: {profile_id}")
     root = PROFILE_ROOT / profile_id
     metadata = read_json_file(root / "profile.json", f"profiles/{profile_id}/profile.json")
-    expected_keys = {"schema_version", "id", "description", "default", "managed_config_keys"}
+    expected_keys = {
+        "schema_version",
+        "id",
+        "description",
+        "default",
+        "managed_config_keys",
+    }
     if set(metadata) != expected_keys:
         fail(f"profiles/{profile_id}/profile.json has invalid keys")
     if metadata["schema_version"] != 2 or metadata["id"] != profile_id:
@@ -1395,14 +1434,20 @@ def replace_managed_state(
     if stamp_content is None:
         if stat_optional(stamp_path(target), STAMP_NAME) is not None:
             move_managed_original_to_undo(
-                transaction, STAMP_NAME, stamp_path(target), fault_injection=fault_injection
+                transaction,
+                STAMP_NAME,
+                stamp_path(target),
+                fault_injection=fault_injection,
             )
             maybe_inject_fault(fault_injection, f"remove:{STAMP_NAME}")
     else:
         ensure_target_private_parent(target, stamp_path(target), STAMP_NAME, create=True)
         if stat_optional(stamp_path(target), STAMP_NAME) is not None:
             move_managed_original_to_undo(
-                transaction, STAMP_NAME, stamp_path(target), fault_injection=fault_injection
+                transaction,
+                STAMP_NAME,
+                stamp_path(target),
+                fault_injection=fault_injection,
             )
         atomic_write(
             stamp_path(target),
@@ -1670,7 +1715,10 @@ def snapshot_backup_object_graph(root: Path) -> BackupObjectGraphSnapshot:
     require_real_private_directory(root, "backup root")
     rows: list[BackupObjectGraphRow] = []
     total = 0
-    entries = [root, *sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix())]
+    entries = [
+        root,
+        *sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()),
+    ]
     for item in entries:
         relative = "." if item == root else item.relative_to(root).as_posix()
         info = item.lstat()
@@ -2153,7 +2201,11 @@ def install_or_switch(
                     "backup:cleanup-old-root",
                     backup_fault_injection,
                 ),
-                (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
+                (
+                    managed_transaction.stage_root,
+                    "managed:cleanup-stage",
+                    fault_injection,
+                ),
             ],
         )
     except (CleanupJournalPublishedInvalid, CleanupPreparePublishedPending):
@@ -2287,7 +2339,12 @@ def remove_target(
     backup_rollback_fault_injection: FaultInjector | None = None,
 ) -> dict[str, Any]:
     if not ensure_target_directory(target, create=False):
-        return {"ok": True, "operation": "remove", "target": str(target), "removed": False}
+        return {
+            "ok": True,
+            "operation": "remove",
+            "target": str(target),
+            "removed": False,
+        }
     cleanup_drained = load_cleanup_journal(target, recover_aliases=True) is not None
     drain_cleanup_pending(target, allow_pending=False)
     rollback_snapshot = snapshot_managed_state(target)
@@ -2343,7 +2400,11 @@ def remove_target(
                     "backup:cleanup-old-root",
                     backup_fault_injection,
                 ),
-                (managed_transaction.stage_root, "managed:cleanup-stage", fault_injection),
+                (
+                    managed_transaction.stage_root,
+                    "managed:cleanup-stage",
+                    fault_injection,
+                ),
             ],
         )
         if not cleanup_pending:
@@ -2405,7 +2466,10 @@ def tree_identity_signature(root: Path) -> tuple[TreeIdentityRow, ...]:
     require_directory(root, "software tree", private=True)
     rows: list[TreeIdentityRow] = []
     total = 0
-    entries = [root, *sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix())]
+    entries = [
+        root,
+        *sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()),
+    ]
     for item in entries:
         info = item.lstat()
         relative = "." if item == root else item.relative_to(root).as_posix()
@@ -2875,7 +2939,16 @@ def validate_cleanup_entry_shape(entry: Any) -> dict[str, Any]:
     validate_id(str(entry["category"]), "cleanup category")
     if str(entry["relative_name"]).split("-", 1)[1] != str(entry["category"]):
         fail("cleanup tombstone name/category mismatch")
-    for key in ("uid", "mode", "nlink", "device", "inode", "size", "mtime_ns", "tree_size"):
+    for key in (
+        "uid",
+        "mode",
+        "nlink",
+        "device",
+        "inode",
+        "size",
+        "mtime_ns",
+        "tree_size",
+    ):
         if not isinstance(entry[key], int) or entry[key] < 0:
             fail(f"cleanup journal {key} must be a non-negative integer")
     digest = entry["tree_sha256"]
@@ -5149,7 +5222,12 @@ def remove_cli(
     rollback_fault_injection: FaultInjector | None = None,
 ) -> dict[str, Any]:
     if not ensure_target_directory(target, create=False):
-        return {"ok": True, "operation": "remove-cli", "target": str(target), "removed": False}
+        return {
+            "ok": True,
+            "operation": "remove-cli",
+            "target": str(target),
+            "removed": False,
+        }
     cleanup_drained = load_cleanup_journal(target, recover_aliases=True) is not None
     drain_cleanup_pending(target, allow_pending=False)
     preflight_software_paths(target)
@@ -5250,8 +5328,8 @@ def external_lock_path_for_digest(digest: str) -> Path:
     return system_lock_root() / f"{digest}.lock"
 
 
-def lock_open_flags() -> int:
-    flags = os.O_RDWR
+def lock_open_flags(*, read_only: bool = False) -> int:
+    flags = os.O_RDONLY if read_only else os.O_RDWR
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
@@ -5305,7 +5383,9 @@ def open_lock_file(
             container_snapshot = None
     ensure_real_private_directory(path.parent, f"lock parent {path.parent}", create=create)
     parent_before = require_real_private_directory(path.parent, f"lock parent {path.parent}")
-    flags = lock_open_flags()
+    flags = lock_open_flags(
+        read_only=not create and lock_operation == fcntl.LOCK_SH,
+    )
     fd: int | None = None
     created_file = False
     file_identity: tuple[int, int] | None = None
@@ -5546,7 +5626,7 @@ def open_existing_anchor(
     if not parent_existed:
         return None
     parent_snapshot = snapshot_private_directory_metadata(path.parent, f"lock parent {path.parent}")
-    flags = lock_open_flags()
+    flags = lock_open_flags(read_only=shared and not recover_aliases)
 
     def open_locked(operation: int, *, recover_aliases: bool) -> tuple[int, tuple[int, int]]:
         try:
@@ -6154,7 +6234,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("launch", help="launch target-owned OpenCode")
     add_target(p)
     p.add_argument("args", nargs=argparse.REMAINDER)
+    provider_runtime_v3.add_commands(
+        sub,
+        add_provider_target,
+        permission_profiles=True,
+    )
     return parser
+
+
+def add_provider_target(parser: argparse.ArgumentParser) -> None:
+    add_target(parser)
+    add_json(parser)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -6179,7 +6269,8 @@ def main(argv: list[str] | None = None) -> int:
         args = parse_args(argv)
     except ManagerCliParseError as exc:
         print(
-            json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True), file=sys.stderr
+            json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True),
+            file=sys.stderr,
         )
         return 2
     try:
@@ -6199,11 +6290,29 @@ def main(argv: list[str] | None = None) -> int:
                     }
                 ],
                 "profiles": [
-                    {"id": profile_id, "description": render_profile(profile_id).description}
+                    {
+                        "id": profile_id,
+                        "description": render_profile(profile_id).description,
+                    }
                     for profile_id in PROFILE_IDS
                 ],
             }
             emit(payload, json_output=args.json)
+            return 0
+
+        if command == "provider-info":
+            emit(PROVIDER_V3.info(), json_output=True)
+            return 0
+
+        if command in {"validate-bundle", "plan-operation", "apply-operation"}:
+            target = resolve_target(args.target)
+            if command == "validate-bundle":
+                payload = PROVIDER_V3.validate(args)
+            elif command == "plan-operation":
+                payload = PROVIDER_V3.plan(target, args)
+            else:
+                payload = PROVIDER_V3.apply(target, args)
+            emit(payload, json_output=True)
             return 0
 
         if command == "launch":
@@ -6224,7 +6333,13 @@ def main(argv: list[str] | None = None) -> int:
                     with read_only_target_locks(target) as locked_target:
                         target = locked_target
                         if command == "status":
-                            payload = current_status(target)
+                            provider_status = PROVIDER_V3.status(target)
+                            if provider_status["state"] == "managed":
+                                payload = provider_status
+                            else:
+                                payload = current_status(target)
+                                payload["state"] = provider_status["state"]
+                                payload["target_digest"] = provider_status["target_digest"]
                         elif command == "software-status":
                             payload = software_status_payload(target)
                         else:
@@ -6307,11 +6422,25 @@ def main(argv: list[str] | None = None) -> int:
                     fail(f"unknown command: {command}")
         emit(payload, json_output=json_output)
         return 0
-    except ManagerError as exc:
+    except (ManagerError, provider_wire_v3.ProtocolError) as exc:
         if getattr(args, "command", None) != "launch" and getattr(args, "json", False):
+            payload = {"ok": False, "error": str(exc)}
+            if isinstance(exc, provider_wire_v3.ProtocolError):
+                payload.update({"rejected": True, "reason": exc.reason})
+                if getattr(args, "command", None) == "validate-bundle":
+                    payload.update(
+                        {
+                            "bundle_format": args.bundle_format,
+                            "bundle_digest": args.bundle_digest,
+                            "artifact_digest": args.artifact_digest,
+                            "bundle_size": args.bundle_size,
+                        }
+                    )
             print(
-                json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True),
-                file=sys.stderr,
+                json.dumps(payload, indent=2, sort_keys=True),
+                file=(
+                    sys.stdout if isinstance(exc, provider_wire_v3.ProtocolError) else sys.stderr
+                ),
             )
         else:
             print(f"nddev-opencode: error: {exc}", file=sys.stderr)

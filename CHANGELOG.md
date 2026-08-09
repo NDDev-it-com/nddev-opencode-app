@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] - 2026-08-09
+
+- Added the capability-negotiated public provider protocol v3 with exact
+  HarnessBundle validation, pure planning, exact-digest application, status,
+  backup, restore, and ownership-scoped removal.
+- Preserve exact component/setup/bundle/plan provenance while retaining the
+  native `opencode.json`, plugin, skill, agent, and command projections; MCP
+  remains explicitly unsupported by this manager.
+
 ## Unreleased
 
 ## [0.2.4] - 2026-08-08

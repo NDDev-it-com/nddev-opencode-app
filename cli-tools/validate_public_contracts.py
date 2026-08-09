@@ -312,7 +312,11 @@ def check_release(
     if not isinstance(host_map, dict) or set(host_map) != set(SUPPORTED_ARTIFACTS):
         errors.append("build/version.json: artifact_product_host_map set mismatch")
         host_map = {}
-    for artifact_id, (suffix, product_host, baseline_x64) in SUPPORTED_ARTIFACTS.items():
+    for artifact_id, (
+        suffix,
+        product_host,
+        baseline_x64,
+    ) in SUPPORTED_ARTIFACTS.items():
         artifact = artifacts.get(artifact_id)
         context = f"build/version.json:artifacts.{artifact_id}"
         if not isinstance(artifact, dict):
@@ -485,7 +489,11 @@ def check_setup_and_profiles(errors: list[str]) -> None:
         if metadata is not None:
             if metadata.get("schema_version") != 2 or metadata.get("id") != profile_id:
                 errors.append(f"profiles/{profile_id}/profile.json: schema/id mismatch")
-            if metadata.get("managed_config_keys") != ["autoupdate", "share", "permission"]:
+            if metadata.get("managed_config_keys") != [
+                "autoupdate",
+                "share",
+                "permission",
+            ]:
                 errors.append(f"profiles/{profile_id}/profile.json: managed keys mismatch")
             if metadata.get("default") is not (profile_id == DEFAULT_PROFILE):
                 errors.append(f"profiles/{profile_id}/profile.json: default mismatch")
@@ -591,6 +599,39 @@ def check_public_tree(errors: list[str]) -> None:
             errors.append(f"Python cache file is forbidden: {relative}")
 
 
+def check_provider_protocol(
+    contract: dict[str, Any] | None,
+    manifest: dict[str, Any] | None,
+    errors: list[str],
+) -> None:
+    expected_commands = [
+        "provider-info",
+        "validate-bundle",
+        "plan-operation",
+        "apply-operation",
+        "recover-operation",
+        "status",
+    ]
+    for label, document in (("contract", contract), ("manifest", manifest)):
+        if document is None:
+            continue
+        provider = document.get("provider_protocol")
+        if not isinstance(provider, dict):
+            errors.append(f"{label}: provider_protocol is required")
+            continue
+        if provider.get("version") != 3 or provider.get("bundle_format") != "ai-stp-bundle/1":
+            errors.append(f"{label}: provider protocol identity mismatch")
+        if provider.get("commands") != expected_commands:
+            errors.append(f"{label}: provider command contract mismatch")
+    for relative in (
+        "cli-tools/provider_protocol_v3.py",
+        "cli-tools/provider_runtime_v3.py",
+    ):
+        check_text(relative, errors)
+    if (ROOT / ".github/workflows").exists():
+        errors.append("public Actions workflows are forbidden")
+
+
 def main() -> int:
     errors: list[str] = []
     version_text = check_text("VERSION", errors).strip()
@@ -604,6 +645,7 @@ def main() -> int:
     check_contract(contract, manifest, version, errors)
     check_setup_and_profiles(errors)
     check_manager_source(version, errors)
+    check_provider_protocol(contract, manifest, errors)
     check_real_regular_file("AGENTS.md", errors)
     check_context_closure(errors)
     for relative in (
@@ -615,7 +657,10 @@ def main() -> int:
         ".claude/CLAUDE.md",
     ):
         check_text(relative, errors)
-    for executable in ("cli-tools/nddev_opencode.py", "cli-tools/validate_public_contracts.py"):
+    for executable in (
+        "cli-tools/nddev_opencode.py",
+        "cli-tools/validate_public_contracts.py",
+    ):
         check_executable(executable, errors)
     check_text("release/package.yml", errors)
     check_public_tree(errors)

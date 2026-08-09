@@ -44,6 +44,19 @@ executes the OpenCode binary:
 python3 cli-tools/nddev_opencode.py status --target /absolute/opencode-target --json
 ```
 
+## ai_stp provider protocol
+
+`provider-info`, `validate-bundle`, `plan-operation`, and `apply-operation`
+implement provider protocol v3. Prepared and component-composed definitions use
+one deterministic HarnessBundle and the same pure-plan, exact confirmation,
+locked apply, verified status, backup, restore, and ownership-scoped removal
+path. The persisted provider state records exact setup/component, bundle,
+provider-release, approved-plan, target, and native-file identities.
+
+Only native `opencode.json`, instruction, skill, agent, command, and plugin
+surfaces are accepted. MCP is explicitly unsupported by this manager and is
+rejected before plan creation or target mutation; no marketplace is invented.
+
 ## Target-owned OpenCode binary
 
 The software lifecycle uses the pinned official GitHub release asset contract

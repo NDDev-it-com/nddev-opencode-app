@@ -8,6 +8,8 @@
 - Preserve exact component/setup/bundle/plan provenance while retaining the
   native `opencode.json`, plugin, skill, agent, and command projections; MCP
   remains explicitly unsupported by this manager.
+- Add durable crash recovery plus fail-closed JSON, skill-marker, ownership,
+  and projection-kind validation before any target mutation.
 
 ## Unreleased
 

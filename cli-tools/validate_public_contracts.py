@@ -609,6 +609,7 @@ def check_provider_protocol(
         "validate-bundle",
         "plan-operation",
         "apply-operation",
+        "recover-operation",
         "status",
     ]
     for label, document in (("contract", contract), ("manifest", manifest)):

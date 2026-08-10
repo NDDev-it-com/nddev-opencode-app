@@ -114,7 +114,9 @@ def check_context_closure(errors: list[str]) -> None:
         return
     entries = {entry.name for entry in directory.iterdir()}
     if entries != {"CLAUDE.md"}:
-        errors.append(f".claude: entries must be exactly ['CLAUDE.md'], found {sorted(entries)}")
+        errors.append(
+            f".claude: entries must be exactly ['CLAUDE.md'], found {sorted(entries)}"
+        )
     check_real_regular_file(".claude/CLAUDE.md", errors)
 
 
@@ -180,7 +182,9 @@ def check_baseline_release(
         errors.append("references/opencode-baseline.json: release object required")
         return
     expected = {
-        "github_release": (f"https://github.com/anomalyco/opencode/releases/tag/v{runtime}"),
+        "github_release": (
+            f"https://github.com/anomalyco/opencode/releases/tag/v{runtime}"
+        ),
         "github_release_api": release.get("api"),
         "tag": release.get("tag"),
     }
@@ -198,9 +202,13 @@ def check_baseline_release(
             f"{sorted(observed)}"
         )
     if baseline_release.get("cli_signature") is not None:
-        errors.append("references/opencode-baseline.json: unsupported CLI signature claim")
+        errors.append(
+            "references/opencode-baseline.json: unsupported CLI signature claim"
+        )
     if not str(baseline_release.get("cli_signature_note", "")).strip():
-        errors.append("references/opencode-baseline.json: CLI signature observation required")
+        errors.append(
+            "references/opencode-baseline.json: CLI signature observation required"
+        )
 
 
 def check_baseline(
@@ -215,9 +223,13 @@ def check_baseline(
     if baseline.get("schema_version") != 2:
         errors.append("references/opencode-baseline.json: schema_version must be 2")
     if "verified_date" in baseline:
-        errors.append("references/opencode-baseline.json: observation-only verified_date forbidden")
+        errors.append(
+            "references/opencode-baseline.json: observation-only verified_date forbidden"
+        )
     if resolve_ref(version, baseline.get("verified_version_ref")) != runtime:
-        errors.append("references/opencode-baseline.json: verified_version_ref mismatch")
+        errors.append(
+            "references/opencode-baseline.json: verified_version_ref mismatch"
+        )
     runtime_contract = baseline.get("runtime")
     if not isinstance(runtime_contract, dict):
         errors.append("references/opencode-baseline.json: runtime object required")
@@ -228,7 +240,9 @@ def check_baseline(
             errors.append("references/opencode-baseline.json: runtime command mismatch")
         for key in ("tested_version_ref", "minimum_version_ref"):
             if resolve_ref(version, runtime_contract.get(key)) is None:
-                errors.append(f"references/opencode-baseline.json: runtime.{key} is invalid")
+                errors.append(
+                    f"references/opencode-baseline.json: runtime.{key} is invalid"
+                )
     check_baseline_release(baseline, runtime, release, errors)
     reference_values = {
         "artifacts_ref": artifacts,
@@ -239,7 +253,10 @@ def check_baseline(
     for key, expected in reference_values.items():
         if resolve_ref(version, baseline.get(key)) != expected:
             errors.append(f"references/opencode-baseline.json: {key} mismatch")
-    if set(baseline.get("source_verified_runtime_flags") or []) != SOURCE_USED_RUNTIME_FLAGS:
+    if (
+        set(baseline.get("source_verified_runtime_flags") or [])
+        != SOURCE_USED_RUNTIME_FLAGS
+    ):
         errors.append("references/opencode-baseline.json: runtime flags mismatch")
     host_scope = baseline.get("product_host_scope")
     if not isinstance(host_scope, dict):
@@ -248,17 +265,25 @@ def check_baseline(
         if host_scope.get("supported") != SUPPORTED_HOSTS:
             errors.append("references/opencode-baseline.json: supported hosts mismatch")
         if host_scope.get("unsupported") != UNSUPPORTED_HOSTS:
-            errors.append("references/opencode-baseline.json: unsupported hosts mismatch")
+            errors.append(
+                "references/opencode-baseline.json: unsupported hosts mismatch"
+            )
     configuration = baseline.get("configuration")
     if not isinstance(configuration, dict):
-        errors.append("references/opencode-baseline.json: configuration object required")
+        errors.append(
+            "references/opencode-baseline.json: configuration object required"
+        )
     else:
         if configuration.get("config_file") != "opencode.json":
             errors.append("references/opencode-baseline.json: config file mismatch")
         if configuration.get("native_builder_projection") != CONTENT_FILES[1:]:
-            errors.append("references/opencode-baseline.json: native builder projection mismatch")
+            errors.append(
+                "references/opencode-baseline.json: native builder projection mismatch"
+            )
         if configuration.get("marketplace") is not None:
-            errors.append("references/opencode-baseline.json: OpenCode marketplace must be null")
+            errors.append(
+                "references/opencode-baseline.json: OpenCode marketplace must be null"
+            )
     permissions = baseline.get("permissions")
     if not isinstance(permissions, dict):
         errors.append("references/opencode-baseline.json: permissions object required")
@@ -299,8 +324,12 @@ def check_release(
                 f"build/version.json: observation-only release fields forbidden: {sorted(observed)}"
             )
         if set(release) != {"tag", "api"}:
-            errors.append("build/version.json: release keys must be exactly tag and api")
-        expected_api = f"https://api.github.com/repos/anomalyco/opencode/releases/tags/v{runtime}"
+            errors.append(
+                "build/version.json: release keys must be exactly tag and api"
+            )
+        expected_api = (
+            f"https://api.github.com/repos/anomalyco/opencode/releases/tags/v{runtime}"
+        )
         if release.get("api") != expected_api:
             errors.append("build/version.json: release.api must match the pinned tag")
 
@@ -325,16 +354,22 @@ def check_release(
         name = f"opencode-{artifact_id}{suffix}"
         observed = OBSERVATION_ONLY_ARTIFACT_FIELDS & set(artifact)
         if observed:
-            errors.append(f"{context}: observation-only fields forbidden: {sorted(observed)}")
+            errors.append(
+                f"{context}: observation-only fields forbidden: {sorted(observed)}"
+            )
         if set(artifact) != {"name", "size", "sha256", "url"}:
-            errors.append(f"{context}: keys must be exactly name, size, sha256, and url")
+            errors.append(
+                f"{context}: keys must be exactly name, size, sha256, and url"
+            )
         if artifact.get("name") != name:
             errors.append(f"{context}: canonical filename mismatch")
         if not isinstance(artifact.get("size"), int) or artifact.get("size", 0) <= 0:
             errors.append(f"{context}: size must be a positive integer")
         if SHA256_RE.fullmatch(str(artifact.get("sha256", ""))) is None:
             errors.append(f"{context}: sha256 must be 64 lowercase hex characters")
-        expected_url = f"https://github.com/anomalyco/opencode/releases/download/v{runtime}/{name}"
+        expected_url = (
+            f"https://github.com/anomalyco/opencode/releases/download/v{runtime}/{name}"
+        )
         if artifact.get("url") != expected_url:
             errors.append(f"{context}: URL must match pinned release and filename")
         if host_map.get(artifact_id) != {
@@ -346,7 +381,9 @@ def check_release(
     if list((version.get("supported_product_hosts") or {}).keys()) != SUPPORTED_HOSTS:
         errors.append("build/version.json: supported product host IDs mismatch")
     if version.get("unsupported_product_hosts") != UNSUPPORTED_HOSTS:
-        errors.append("build/version.json: unsupported product host categories mismatch")
+        errors.append(
+            "build/version.json: unsupported product host categories mismatch"
+        )
     if version.get("python_requires") != ">=3.9":
         errors.append("build/version.json: python_requires must remain >=3.9")
 
@@ -371,7 +408,10 @@ def check_manifest(
 ) -> None:
     if manifest is None:
         return
-    if manifest.get("schema_version") != 2 or manifest.get("build_version") != version_text:
+    if (
+        manifest.get("schema_version") != 2
+        or manifest.get("build_version") != version_text
+    ):
         errors.append("build/manifest.json: schema/build version mismatch")
     if manifest.get("setup_ids") != SETUP_IDS:
         errors.append("build/manifest.json: setup_ids mismatch")
@@ -388,8 +428,13 @@ def check_manifest(
     if not isinstance(builder, dict):
         errors.append("build/manifest.json: builder object required")
     else:
-        if builder.get("projection") != "native" or builder.get("marketplace") is not None:
-            errors.append("build/manifest.json: native non-marketplace builder required")
+        if (
+            builder.get("projection") != "native"
+            or builder.get("marketplace") is not None
+        ):
+            errors.append(
+                "build/manifest.json: native non-marketplace builder required"
+            )
         if builder.get("managed_files") != CONTENT_FILES[1:]:
             errors.append("build/manifest.json: builder managed_files mismatch")
     software = manifest.get("software_lifecycle")
@@ -442,7 +487,10 @@ def check_contract(
     if not isinstance(setup, dict):
         errors.append("config/nddev-contract.json: setup_system required")
     else:
-        if setup.get("setup_ids") != SETUP_IDS or setup.get("profile_ids") != PROFILE_IDS:
+        if (
+            setup.get("setup_ids") != SETUP_IDS
+            or setup.get("profile_ids") != PROFILE_IDS
+        ):
             errors.append("config/nddev-contract.json: setup/profile IDs mismatch")
         if setup.get("default_setup") != SETUP_IDS[0]:
             errors.append("config/nddev-contract.json: default setup mismatch")
@@ -450,15 +498,22 @@ def check_contract(
             errors.append("config/nddev-contract.json: default profile mismatch")
     managed = contract.get("managed_state")
     if not isinstance(managed, dict) or managed.get("managed_files") != MANAGED_FILES:
-        errors.append("config/nddev-contract.json: managed files disagree with manifest")
+        errors.append(
+            "config/nddev-contract.json: managed files disagree with manifest"
+        )
     builder = contract.get("builder")
     if not isinstance(builder, dict):
         errors.append("config/nddev-contract.json: builder required")
     else:
-        if builder.get("projection") != "native" or builder.get("marketplace") is not None:
+        if (
+            builder.get("projection") != "native"
+            or builder.get("marketplace") is not None
+        ):
             errors.append("config/nddev-contract.json: builder identity mismatch")
         if builder.get("enabled_in_setups") != SETUP_IDS:
-            errors.append("config/nddev-contract.json: builder setup enablement mismatch")
+            errors.append(
+                "config/nddev-contract.json: builder setup enablement mismatch"
+            )
     compatibility = contract.get("runtime_compatibility")
     if not isinstance(compatibility, dict):
         errors.append("config/nddev-contract.json: runtime_compatibility required")
@@ -494,7 +549,9 @@ def check_setup_and_profiles(errors: list[str]) -> None:
                 "share",
                 "permission",
             ]:
-                errors.append(f"profiles/{profile_id}/profile.json: managed keys mismatch")
+                errors.append(
+                    f"profiles/{profile_id}/profile.json: managed keys mismatch"
+                )
             if metadata.get("default") is not (profile_id == DEFAULT_PROFILE):
                 errors.append(f"profiles/{profile_id}/profile.json: default mismatch")
         if config is None:
@@ -502,9 +559,13 @@ def check_setup_and_profiles(errors: list[str]) -> None:
         if config.get("$schema") != "https://opencode.ai/config.json":
             errors.append(f"profiles/{profile_id}/opencode.json: schema mismatch")
         if config.get("autoupdate") is not False or config.get("share") != "disabled":
-            errors.append(f"profiles/{profile_id}/opencode.json: runtime posture mismatch")
+            errors.append(
+                f"profiles/{profile_id}/opencode.json: runtime posture mismatch"
+            )
         if "tools" in config or "tool" in config:
-            errors.append(f"profiles/{profile_id}/opencode.json: legacy tools key forbidden")
+            errors.append(
+                f"profiles/{profile_id}/opencode.json: legacy tools key forbidden"
+            )
         permission = config.get("permission")
         if profile_id == "full-auto" and permission != "allow":
             errors.append("profiles/full-auto/opencode.json: permission must be allow")
@@ -518,7 +579,9 @@ def check_setup_and_profiles(errors: list[str]) -> None:
                 or (permission.get("skill") or {}).get("nddev-builder") != "allow"
                 or (permission.get("task") or {}).get("nddev-builder") != "allow"
             ):
-                errors.append("profiles/safe/opencode.json: permission posture mismatch")
+                errors.append(
+                    "profiles/safe/opencode.json: permission posture mismatch"
+                )
 
 
 def check_manager_source(version: dict[str, Any] | None, errors: list[str]) -> None:
@@ -538,7 +601,9 @@ def check_manager_source(version: dict[str, Any] | None, errors: list[str]) -> N
     }
     observed = OBSERVATION_ONLY_MANAGER_NAMES & names
     if observed:
-        errors.append(f"{relative}: observation-only runtime names forbidden: {sorted(observed)}")
+        errors.append(
+            f"{relative}: observation-only runtime names forbidden: {sorted(observed)}"
+        )
     literals: dict[str, object] = {}
     for node in tree.body:
         target: ast.expr | None = None
@@ -567,12 +632,18 @@ def check_manager_source(version: dict[str, Any] | None, errors: list[str]) -> N
     if not isinstance(release, dict):
         return
     if literals.get("OPENCODE_RELEASE_TAG") != release.get("tag"):
-        errors.append(f"{relative}: OPENCODE_RELEASE_TAG disagrees with build/version.json")
+        errors.append(
+            f"{relative}: OPENCODE_RELEASE_TAG disagrees with build/version.json"
+        )
     if literals.get("OPENCODE_RELEASE_API") != release.get("api"):
-        errors.append(f"{relative}: OPENCODE_RELEASE_API disagrees with build/version.json")
+        errors.append(
+            f"{relative}: OPENCODE_RELEASE_API disagrees with build/version.json"
+        )
     manager_artifacts = literals.get("ARTIFACTS")
     version_artifacts = version.get("artifacts")
-    if not isinstance(manager_artifacts, dict) or not isinstance(version_artifacts, dict):
+    if not isinstance(manager_artifacts, dict) or not isinstance(
+        version_artifacts, dict
+    ):
         errors.append(f"{relative}: static ARTIFACTS table required")
         return
     expected = {
@@ -619,7 +690,10 @@ def check_provider_protocol(
         if not isinstance(provider, dict):
             errors.append(f"{label}: provider_protocol is required")
             continue
-        if provider.get("version") != 3 or provider.get("bundle_format") != "ai-stp-bundle/1":
+        if (
+            provider.get("version") != 3
+            or provider.get("bundle_format") != "ai-stp-bundle/1"
+        ):
             errors.append(f"{label}: provider protocol identity mismatch")
         if provider.get("commands") != expected_commands:
             errors.append(f"{label}: provider command contract mismatch")
@@ -634,7 +708,9 @@ def check_provider_protocol(
     else:
         workflow_files = {path.name for path in workflows.iterdir() if path.is_file()}
         if workflow_files != {"test.yml"}:
-            errors.append("public repository may contain only the release-check test.yml workflow")
+            errors.append(
+                "public repository may contain only the release-check test.yml workflow"
+            )
         else:
             workflow = (workflows / "test.yml").read_text(encoding="utf-8")
             for fragment in (

@@ -628,8 +628,30 @@ def check_provider_protocol(
         "cli-tools/provider_runtime_v3.py",
     ):
         check_text(relative, errors)
-    if (ROOT / ".github/workflows").exists():
-        errors.append("public Actions workflows are forbidden")
+    workflows = ROOT / ".github" / "workflows"
+    if not workflows.is_dir():
+        errors.append("required release-check workflow directory is missing")
+    else:
+        workflow_files = {path.name for path in workflows.iterdir() if path.is_file()}
+        if workflow_files != {"test.yml"}:
+            errors.append("public repository may contain only the release-check test.yml workflow")
+        else:
+            workflow = (workflows / "test.yml").read_text(encoding="utf-8")
+            for fragment in (
+                "permissions:\n  contents: read",
+                "runs-on: ubuntu-24.04",
+                "name: test",
+                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                "run: python3 cli-tools/validate_public_contracts.py",
+            ):
+                if fragment not in workflow:
+                    errors.append(
+                        f"test.yml is missing required release-check fragment: {fragment!r}"
+                    )
+            if "pull_request_target" in workflow or "${{ secrets" in workflow:
+                errors.append(
+                    "test.yml may not use privileged PR triggers or repository secrets"
+                )
 
 
 def main() -> int:

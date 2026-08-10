@@ -3,7 +3,7 @@
   "compiled_policy": {
     "repository_id": "repo_01KYFBZ4AK44Y9B7MRQ1C2WKPF",
     "bundle_version": "0.4.0-dev",
-    "digest": "sha256:920596f87d0175bfbb373f1c3d21b6a92eab9dcca881f65c8c72a536a961e68b"
+    "digest": "sha256:cd81c5467b74b96161d8710ae010f7c7a4a35bac9f3c1663236f71ebc4ed007f"
   },
   "sources": [
     {
@@ -12,7 +12,7 @@
       "priority": 100,
       "distribution": "public",
       "path": "policies/base/repository-default.yaml",
-      "digest": "sha256:13324a48e45daa7008310bb24d158ee92b606316040e3a70433b5c942a187af5"
+      "digest": "sha256:538f486d49620c169cbbac77745ce2ecc21010ebd4a564017c79cefbb468ca1e"
     },
     {
       "id": "organization-default",
@@ -28,7 +28,7 @@
       "priority": 100,
       "distribution": "public",
       "path": "policies/roles/public-module.yaml",
-      "digest": "sha256:ece6164691eda262e2692f97bd70262ea98c268084900b3f285f3d50f3767200"
+      "digest": "sha256:084f7b09dbfd85a386e47cf83ea0015154b6b01fa3cf85a68f04ef407b89ed4b"
     }
   ],
   "effective": {
@@ -101,6 +101,12 @@
         "squash_merge_commit_title": {
           "management": "managed",
           "value": "PR_TITLE"
+        }
+      },
+      "releases": {
+        "immutable": {
+          "management": "managed",
+          "value": true
         }
       },
       "rulesets": {
@@ -362,6 +368,20 @@
       "tier": "base",
       "priority": 100,
       "file": "policies/base/repository-default.yaml",
+      "operation": "set"
+    },
+    "/effective/github/releases/immutable/management": {
+      "source": "public-module",
+      "tier": "role",
+      "priority": 100,
+      "file": "policies/roles/public-module.yaml",
+      "operation": "set"
+    },
+    "/effective/github/releases/immutable/value": {
+      "source": "public-module",
+      "tier": "role",
+      "priority": 100,
+      "file": "policies/roles/public-module.yaml",
       "operation": "set"
     },
     "/effective/github/rulesets/management": {
